@@ -1,0 +1,24 @@
+{
+  "title": "Those $10 game skins could cost you $20,266",
+  "caption": "$10 a month on skins from 13 to 23 = $1,200. Invested at 7% instead, that's about $20,266 by 60. Not saying stop gaming, just know the real price. (Illustration, not financial advice.) #money #personalfinance #gaming #fintok",
+  "seconds": 27.3,
+  "file": "cents_006_skins.mp4",
+  "ai_label": "Voice is AI-generated (Kokoro TTS); turn on the platform's AI-generated content label.",
+  "assets": [
+    {
+      "what": "visuals, captions, logo",
+      "source": "rendered by shorts-studio",
+      "license": "own work"
+    },
+    {
+      "what": "voiceover",
+      "source": "Kokoro-82M TTS",
+      "license": "Apache-2.0"
+    },
+    {
+      "what": "music and sound effects",
+      "source": "synthesized by studio/audio.py",
+      "license": "own work"
+    }
+  ]
+}

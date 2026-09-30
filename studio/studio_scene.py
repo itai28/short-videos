@@ -61,8 +61,8 @@ class Studio:
         return img
 
 
-def draw_presenter(img, t, mouth, bounce=0.0):
-    """Centy behind the desk. `mouth` is 0..1 (voice loudness)."""
+def draw_presenter(img, t, mouth, bounce=0.0, shape=0.5):
+    """Centy behind the desk. `mouth` is 0..1 (voice loudness); `shape` 0 = round "oo", 1 = wide "ee"."""
     d = ImageDraw.Draw(img, "RGBA")
     cx, cy, r = HEAD
     cy += 6 * math.sin(t * 2.2) - 18 * bounce
@@ -96,13 +96,16 @@ def draw_presenter(img, t, mouth, bounce=0.0):
     for sx in (-1, 1):
         d.ellipse([cx + sx * 95 - 22, cy + 18, cx + sx * 95 + 22, cy + 42], fill=(255, 130, 120, 140))
     # mouth follows the voice
-    mo = 6 + 52 * mouth
     if mouth < 0.12:
         d.arc([cx - 46, cy + 10, cx + 46, cy + 72], start=20, end=160, fill=(90, 20, 30), width=10)
     else:
-        d.rounded_rectangle([cx - 44, cy + 50, cx + 44, cy + 50 + mo], radius=int(min(30, mo / 2 + 4)), fill=(90, 20, 30))
-    if mouth >= 0.12 and mo > 24:
-        d.ellipse([cx - 22, cy + 50 + mo - 20, cx + 22, cy + 50 + mo - 2], fill=(255, 110, 130))
+        half_w = 26 + 30 * shape            # round for "oo", wide for "ee"
+        mo = 14 + 56 * mouth * (1.15 - 0.35 * shape)
+        top = cy + 46
+        d.ellipse([cx - half_w, top, cx + half_w, top + mo], fill=(90, 20, 30))
+        if mo > 26:
+            d.rectangle([cx - half_w * 0.6, top + 2, cx + half_w * 0.6, top + 9], fill=(255, 255, 255))
+            d.ellipse([cx - half_w * 0.55, top + mo * 0.55, cx + half_w * 0.55, top + mo - 3], fill=(255, 110, 130))
     # mic on a boom arm
     d.line([(W - 60, DESK_Y - 10), (cx + 250, cy + 60), (cx + 150, cy + 95)], fill=(40, 40, 50), width=14, joint="curve")
     d.rounded_rectangle([cx + 110, cy + 60, cx + 175, cy + 150], radius=30, fill=(60, 60, 75), outline=(20, 20, 30), width=4)
@@ -118,16 +121,40 @@ def draw_presenter(img, t, mouth, bounce=0.0):
 
 
 def mouth_curve(voice, sr, fps, n_frames):
-    """Per-frame mouth opening from the voice track's loudness."""
+    """Per-frame mouth opening and shape from the voiceover.
+
+    Opening follows loudness in the speech band, with a gate so the mouth shuts
+    between words. Shape follows where the energy sits in the spectrum: bright
+    sounds ("ee", "s") read wide, dark ones ("oo", "o") read round.
+    """
     hop = sr / fps
-    out = np.zeros(n_frames, dtype=np.float32)
+    win = int(hop * 1.5)
+    window = np.hanning(win)
+    freqs = np.fft.rfftfreq(win, 1 / sr)
+    band = (freqs > 250) & (freqs < 4000)
+    level = np.zeros(n_frames, dtype=np.float32)
+    bright = np.zeros(n_frames, dtype=np.float32)
     for f in range(n_frames):
-        seg = voice[int(f * hop): int((f + 1) * hop)]
-        if len(seg):
-            out[f] = np.sqrt(np.mean(seg ** 2))
-    peak = np.percentile(out[out > 0], 95) if np.any(out > 0) else 1
-    out = np.clip(out / peak, 0, 1)
-    smooth = np.copy(out)
+        c = int(f * hop + hop / 2)
+        seg = voice[max(0, c - win // 2): c - win // 2 + win]
+        if len(seg) < win:
+            continue
+        spec = np.abs(np.fft.rfft(seg * window))
+        e = spec[band]
+        level[f] = np.sqrt(np.mean(e ** 2))
+        if e.sum() > 0:
+            bright[f] = (freqs[band] * e).sum() / e.sum()
+    voiced = level[level > 0]
+    if not len(voiced):
+        return level, np.full(n_frames, 0.5, dtype=np.float32)
+    lo, hi = np.percentile(voiced, 20), np.percentile(voiced, 95)
+    opening = np.clip((level - lo) / (hi - lo + 1e-9), 0, 1)
+    shape = np.clip((bright - 900) / 1600, 0, 1)
+    # quick to open, a little slower to close, like a real jaw
+    out = np.copy(opening)
     for f in range(1, n_frames):
-        smooth[f] = max(out[f], smooth[f - 1] * 0.55)
-    return smooth
+        out[f] = opening[f] if opening[f] > out[f - 1] else out[f - 1] * 0.5 + opening[f] * 0.5
+    sm = np.copy(shape)
+    for f in range(1, n_frames):
+        sm[f] = sm[f - 1] * 0.5 + shape[f] * 0.5
+    return out, sm

@@ -18,8 +18,22 @@ Output goes to `videos/<channel>/`: the MP4 plus a JSON file holding the title, 
 - `studio/channels.py`: per-channel handle and colours.
 - `scripts/`: one file per video (scenes, title, caption).
 
-## Next
+## Archive
 
-1. Swap the generated music bed for a library track when posting, if you prefer.
-2. A 60 to 75 second TikTok cut, so videos qualify for Creator Rewards.
-3. Approval queue, then uploaders using YouTube Data API and TikTok Content Posting API with OAuth. No passwords are stored.
+Finished videos live in `archive/<channel>/` (MP4 + JSON with title, caption and asset licenses).
+
+## Posting schedule
+
+`python3 -m publish.schedule 2026-10-02` adds every archived video to `publish/schedule.json`, one a day: 6 PM ET on weekdays and 12 PM ET on weekends.
+
+The **Publish schedule** GitHub Action runs every hour:
+
+- **YouTube:** uploads each scheduled video as private with `publishAt`, and YouTube makes it public at that time.
+- **TikTok:** at post time, sends the video to your TikTok inbox and opens a GitHub issue with the caption. You tap the TikTok notification, paste the caption and post. TikTok requires this until the developer app passes its audit.
+
+### One-time setup (you)
+
+1. **YouTube:** create a Google Cloud project, enable *YouTube Data API v3*, and create an OAuth client of type *Desktop app*. Download `client_secret.json`, run `python3 -m publish.youtube auth client_secret.json`, and sign in as the channel. Put the contents of `.secrets/youtube_token.json` in the repo secret `YT_TOKEN_JSON`. Uploads stay private until Google approves the API project in its [audit](https://support.google.com/youtube/contact/yt_api_form), so apply right away.
+2. **TikTok:** create an app at developers.tiktok.com with Login Kit and Content Posting API (scope `video.upload`). Set the secrets `TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET`, run `python3 -m publish.tiktok auth <redirect-uri>`, and put `.secrets/tiktok_token.json` in the secret `TIKTOK_TOKEN_JSON`.
+
+No passwords are stored anywhere. Only revocable OAuth tokens are, and you can revoke them from your Google and TikTok account settings.

@@ -1,0 +1,24 @@
+{
+  "title": "Your birthday money could be worth $24,528",
+  "caption": "Invest $200 of birthday money every year from 13 to 18 ($1,200 total) and never touch it. At 7% a year it's about $24,528 by 60. Show your parents. (Illustration, 7% average yearly return assumed. Not financial advice.) #money #personalfinance #fintok #investing",
+  "seconds": 30.2,
+  "file": "cents_004_birthday.mp4",
+  "ai_label": "Voice is AI-generated (Kokoro TTS); turn on the platform's AI-generated content label.",
+  "assets": [
+    {
+      "what": "visuals, captions, logo",
+      "source": "rendered by shorts-studio",
+      "license": "own work"
+    },
+    {
+      "what": "voiceover",
+      "source": "Kokoro-82M TTS",
+      "license": "Apache-2.0"
+    },
+    {
+      "what": "music and sound effects",
+      "source": "synthesized by studio/audio.py",
+      "license": "own work"
+    }
+  ]
+}

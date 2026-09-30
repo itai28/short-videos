@@ -11,7 +11,7 @@ TITLE = f"Your $6 coffee costs {money(final)}"
 CAPTION = (f"$6 a workday = {money(yearly)} a year. Invested at 7% for 30 years = {money(final)}. "
            "What's your daily habit? I'll run your numbers next. "
            "(Illustration assuming a 7% average yearly return. Not financial advice.) "
-           "#money #personalfinance #investing #coffee")
+           "#money #personalfinance #fintok #investing")
 
 SPEC = {
     **CENTS_IN_SIXTY,

@@ -45,3 +45,18 @@ def spoken_dollars(x):
         head, rest = n // 100, n % 100
         return f"{_under_1000(head)} hundred" + (f" and {_under_1000(rest)}" if rest else "") + " dollars"
     return f"{_under_1000(n)} dollars" if n < 1000 else f"{spoken_thousands(n)} dollars"
+
+
+def future_value(amount, rate, years):
+    return amount * (1 + rate) ** years
+
+
+def yearly_needed(target, rate, years):
+    """Yearly contribution that grows to `target` after `years`."""
+    return target * rate / ((1 + rate) ** years - 1)
+
+
+def spoken_millions(x):
+    """5368709 -> 'five point four million'."""
+    whole, tenth = divmod(round(x / 100000), 10)
+    return f"{_under_1000(whole)} point {_ONES[tenth]} million" if tenth else f"{_under_1000(whole)} million"

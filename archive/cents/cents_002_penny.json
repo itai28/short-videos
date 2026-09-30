@@ -1,0 +1,24 @@
+{
+  "title": "$1,000,000 now or a penny that doubles for 30 days?",
+  "caption": "A penny doubled every day for 30 days = $5,368,709. On day 20 it's only $5,243. That's compounding. Which one did you pick? #money #personalfinance #fintok #compoundinterest",
+  "seconds": 33.4,
+  "file": "cents_002_penny.mp4",
+  "ai_label": "Voice is AI-generated (Kokoro TTS); turn on the platform's AI-generated content label.",
+  "assets": [
+    {
+      "what": "visuals, captions, logo",
+      "source": "rendered by shorts-studio",
+      "license": "own work"
+    },
+    {
+      "what": "voiceover",
+      "source": "Kokoro-82M TTS",
+      "license": "Apache-2.0"
+    },
+    {
+      "what": "music and sound effects",
+      "source": "synthesized by studio/audio.py",
+      "license": "own work"
+    }
+  ]
+}

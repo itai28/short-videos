@@ -88,6 +88,10 @@ class Background:
 # ---------- drawing helpers ----------
 
 def text_center(d, xy, text, size, fill, stroke=0, stroke_fill=(0, 0, 0)):
+    room = SAFE_RIGHT - SAFE_LEFT - 50
+    width = d.textlength(text, font=font(size))
+    if width > room:
+        size = size * room / width
     d.text(xy, text, font=font(size), fill=fill, anchor="mm", stroke_width=stroke, stroke_fill=stroke_fill)
 
 
@@ -134,16 +138,6 @@ class Coins:
             y = y0 + 700 * t + 500 * t * t
             squash = abs(math.cos(ph + t * 8))
             d.ellipse([x - r, y - r * squash, x + r, y + r * squash], fill=color, outline=(190, 130, 0), width=4)
-
-
-def draw_clock(d, theme, progress, total):
-    """The channel's signature: a stopwatch ring that drains as the video plays."""
-    cx, cy, r = SAFE_RIGHT - 50, 340, 40
-    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=(255, 255, 255), width=6)
-    end = -90 + 360 * (1 - progress)
-    if end > -90:
-        d.arc([cx - r, cy - r, cx + r, cy + r], start=-90, end=end, fill=rgb(theme["accent"]), width=10)
-    text_center(d, (cx, cy), str(max(0, math.ceil(total * (1 - progress)))), 34, (255, 255, 255))
 
 
 # ---------- captions ----------
@@ -204,8 +198,51 @@ def draw_captions(d, theme, words, starts, t):
 
 # ---------- visuals ----------
 
+def draw_gamepad(img, cx, cy, s, t):
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([cx - 190 * s, cy - 90 * s, cx + 190 * s, cy + 90 * s], radius=90 * s, fill=(70, 70, 90))
+    d.rectangle([cx - 100 * s, cy - 20 * s, cx - 40 * s, cy + 20 * s], fill=(230, 230, 240))
+    d.rectangle([cx - 90 * s, cy - 30 * s, cx - 50 * s, cy + 30 * s], fill=(230, 230, 240))
+    for i, (dx, dy, c) in enumerate([(80, -30, (255, 80, 110)), (120, 0, (80, 200, 255)), (80, 30, (120, 230, 120)), (40, 0, (255, 210, 60))]):
+        r = 17 * s * (1.2 if int(t * 4) % 4 == i else 1)
+        d.ellipse([cx + dx * s - r, cy + dy * s - r, cx + dx * s + r, cy + dy * s + r], fill=c)
+
+
+def draw_gift(img, cx, cy, s, t):
+    d = ImageDraw.Draw(img)
+    wob = 8 * math.sin(t * 6)
+    d.rectangle([cx - 150 * s, cy - 40 * s, cx + 150 * s, cy + 150 * s], fill=(255, 90, 120))
+    d.rectangle([cx - 165 * s, cy - 95 * s + wob, cx + 165 * s, cy - 40 * s + wob], fill=(255, 120, 150))
+    d.rectangle([cx - 22 * s, cy - 95 * s + wob, cx + 22 * s, cy + 150 * s], fill=(255, 215, 70))
+    d.ellipse([cx - 90 * s, cy - 165 * s + wob, cx - 5 * s, cy - 95 * s + wob], outline=(255, 215, 70), width=int(18 * s))
+    d.ellipse([cx + 5 * s, cy - 165 * s + wob, cx + 90 * s, cy - 95 * s + wob], outline=(255, 215, 70), width=int(18 * s))
+
+
+def draw_penny(img, cx, cy, s, t):
+    d = ImageDraw.Draw(img)
+    squash = abs(math.cos(t * 3))
+    r = 150 * s
+    d.ellipse([cx - r * max(squash, 0.08), cy - r, cx + r * max(squash, 0.08), cy + r], fill=(205, 120, 60), outline=(150, 80, 30), width=10)
+    if squash > 0.5:
+        text_center(d, (cx, cy), "1¢", 110 * s * squash, (255, 230, 200))
+
+
+def draw_rocket(img, cx, cy, s, t):
+    d = ImageDraw.Draw(img)
+    cy += 10 * math.sin(t * 8)
+    d.polygon([(cx, cy - 190 * s), (cx - 70 * s, cy - 60 * s), (cx - 70 * s, cy + 100 * s), (cx + 70 * s, cy + 100 * s), (cx + 70 * s, cy - 60 * s)], fill=(235, 235, 245))
+    d.ellipse([cx - 35 * s, cy - 60 * s, cx + 35 * s, cy + 10 * s], fill=(80, 200, 255), outline=(60, 60, 80), width=8)
+    d.polygon([(cx - 70 * s, cy + 20 * s), (cx - 130 * s, cy + 130 * s), (cx - 70 * s, cy + 100 * s)], fill=(255, 80, 110))
+    d.polygon([(cx + 70 * s, cy + 20 * s), (cx + 130 * s, cy + 130 * s), (cx + 70 * s, cy + 100 * s)], fill=(255, 80, 110))
+    flame = 60 + 30 * abs(math.sin(t * 20))
+    d.polygon([(cx - 45 * s, cy + 100 * s), (cx, cy + (100 + flame) * s), (cx + 45 * s, cy + 100 * s)], fill=(255, 190, 40))
+
+
+ICONS = {"cup": draw_cup, "gamepad": draw_gamepad, "gift": draw_gift, "penny": draw_penny, "rocket": draw_rocket}
+
+
 def visual_hero(img, d, theme, v, t, dur):
-    draw_cup(img, CX, VISUAL_Y - 10, 0.85 + 0.03 * math.sin(t * 3), t)
+    ICONS[v.get("icon", "cup")](img, CX, VISUAL_Y - 10, 0.85 + 0.03 * math.sin(t * 3), t)
     if "big" in v:
         pop_text(d, (CX, VISUAL_Y + 225), v["big"], 130, rgb(theme["accent"]), t, delay=v.get("big_at", 0.8))
 
@@ -309,7 +346,7 @@ def render(spec, out_path):
     theme = spec["theme"]
     track, voice, total = build_audio(spec)
     studio = Studio()
-    mouths = mouth_curve(voice, audio.SR, FPS, int(total * FPS) + 1)
+    mouths, shapes = mouth_curve(voice, audio.SR, FPS, int(total * FPS) + 1)
     hits = [s["_start"] + off for s in spec["scenes"] for _, off in s.get("sfx", [])]
     with tempfile.TemporaryDirectory() as tmp:
         wav = os.path.join(tmp, "a.wav")
@@ -331,9 +368,8 @@ def render(spec, out_path):
             img = studio.frame(now)
             d = ImageDraw.Draw(img)
             VISUALS[scene["visual"]["kind"]](img, d, theme, scene["visual"], t, scene["_dur"])
-            draw_clock(d, theme, now / total, total)
             bounce = max([math.exp(-(now - h) * 9) for h in hits if 0 <= now - h < 0.6] or [0])
-            draw_presenter(img, now, float(mouths[f]), bounce)
+            draw_presenter(img, now, float(mouths[f]), bounce, float(shapes[f]))
             d = ImageDraw.Draw(img)
             draw_captions(d, theme, scene["_words"], scene["_starts"], t - 0.15)
             proc.stdin.write(img.tobytes())

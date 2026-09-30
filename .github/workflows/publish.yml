@@ -1,0 +1,52 @@
+name: Publish schedule
+
+on:
+  schedule:
+    - cron: "5 * * * *"      # hourly; each step only acts on what's due
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency: publish
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      YT_TOKEN_JSON: ${{ secrets.YT_TOKEN_JSON }}
+      TIKTOK_TOKEN_JSON: ${{ secrets.TIKTOK_TOKEN_JSON }}
+      TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+      TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r publish/requirements.txt
+
+      - name: Schedule new videos on YouTube
+        if: ${{ env.YT_TOKEN_JSON != '' }}
+        run: python3 -m publish.run youtube
+
+      - name: Send due video to TikTok inbox
+        if: ${{ env.TIKTOK_TOKEN_JSON != '' }}
+        run: |
+          python3 -m publish.run tiktok | tee tiktok.log
+          grep '^TIKTOK_READY::' tiktok.log | while IFS= read -r line; do
+            video=$(echo "$line" | cut -d: -f3)
+            caption=$(echo "$line" | cut -d: -f5-)
+            gh issue create --title "Post on TikTok: $(basename "$video" .mp4)" \
+              --body "The video is in your TikTok inbox. Open TikTok, tap the notification, paste this caption, turn on the AI-generated label, and post:
+
+          $caption"
+          done
+
+      - name: Save schedule state
+        run: |
+          git config user.name "shorts-studio bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add publish/schedule.json
+          git diff --cached --quiet || (git commit -m "Update publish state" && git push)

@@ -1,0 +1,24 @@
+{
+  "title": "Your $6 coffee costs $147,359",
+  "caption": "$6 a workday = $1,560 a year. Invested at 7% for 30 years = $147,359. What's your daily habit? I'll run your numbers next. (Illustration assuming a 7% average yearly return. Not financial advice.) #money #personalfinance #fintok #investing",
+  "seconds": 39.4,
+  "file": "cents_001_coffee.mp4",
+  "ai_label": "Voice is AI-generated (Kokoro TTS); turn on the platform's AI-generated content label.",
+  "assets": [
+    {
+      "what": "visuals, captions, logo",
+      "source": "rendered by shorts-studio",
+      "license": "own work"
+    },
+    {
+      "what": "voiceover",
+      "source": "Kokoro-82M TTS",
+      "license": "Apache-2.0"
+    },
+    {
+      "what": "music and sound effects",
+      "source": "synthesized by studio/audio.py",
+      "license": "own work"
+    }
+  ]
+}
