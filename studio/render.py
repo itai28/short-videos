@@ -1,34 +1,57 @@
-"""Render a scene spec (dict) to a vertical 1080x1920 MP4.
+"""Render a voiced scene spec to a vertical 1080x1920 MP4.
 
-Scenes are drawn frame by frame with Pillow and piped into ffmpeg.
-Scene types: "text" (stacked lines that pop in, optional count-up number)
-and "bars" (a growing bar chart with a running total).
+Each scene has a line of voiceover (`say`) and a visual. The voice decides how
+long the scene runs; captions follow the voice word by word. Frames are drawn
+with Pillow and piped to ffmpeg, then muxed with the mixed audio track.
 """
+import math
+import os
+import random
 import subprocess
+import tempfile
 
 import imageio_ffmpeg
-from PIL import Image, ImageDraw, ImageFont
+import numpy as np
+import soundfile as sf
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+from studio import audio
 
 W, H = 1080, 1920
+FPS = 30
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-FONT_REG = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+ASSETS = os.path.join(os.path.dirname(__file__), "..", "assets")
+
+# Keep content clear of the TikTok/Shorts overlays: top bar, right-side buttons, bottom caption.
+SAFE_LEFT, SAFE_RIGHT, SAFE_TOP, SAFE_BOTTOM = 80, W - 190, 260, H - 420
+CX = (SAFE_LEFT + SAFE_RIGHT) // 2
+VISUAL_Y = 720            # centre of the visual area
+CAPTION_Y = 1300          # centre of the caption line
 
 _fonts = {}
 
 
-def font(size, bold=True):
-    key = (size, bold)
-    if key not in _fonts:
-        _fonts[key] = ImageFont.truetype(FONT_BOLD if bold else FONT_REG, size)
-    return _fonts[key]
+def font(size):
+    size = max(8, int(size))
+    if size not in _fonts:
+        _fonts[size] = ImageFont.truetype(FONT_BOLD, size)
+    return _fonts[size]
+
+
+def clamp(t):
+    return max(0.0, min(1.0, t))
 
 
 def ease_out(t):
-    t = max(0.0, min(1.0, t))
-    return 1 - (1 - t) ** 3
+    return 1 - (1 - clamp(t)) ** 3
 
 
-def hex_rgb(h):
+def back_out(t, s=1.9):
+    t = clamp(t) - 1
+    return t * t * ((s + 1) * t + s) + 1
+
+
+def rgb(h):
     h = h.lstrip("#")
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 
@@ -37,128 +60,278 @@ def mix(a, b, t):
     return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
 
 
-def background(theme):
-    top, bottom = hex_rgb(theme["bg_top"]), hex_rgb(theme["bg_bottom"])
-    img = Image.new("RGB", (W, H))
+# ---------- background ----------
+
+class Background:
+    """Gradient with soft light blobs that drift slowly, so the frame never sits still."""
+
+    def __init__(self, theme):
+        top, bottom = rgb(theme["bg_top"]), rgb(theme["bg_bottom"])
+        grad = np.linspace(0, 1, H)[:, None, None]
+        arr = np.array(top)[None, None, :] * (1 - grad) + np.array(bottom)[None, None, :] * grad
+        self.base = Image.fromarray(np.repeat(arr, W, axis=1).astype(np.uint8))
+        blob = Image.new("L", (700, 700), 0)
+        ImageDraw.Draw(blob).ellipse([230, 230, 470, 470], fill=80)
+        self.blob = blob.filter(ImageFilter.GaussianBlur(60))
+        self.glow = Image.new("RGB", (700, 700), rgb(theme["accent"]))
+
+    def frame(self, t):
+        img = self.base.copy()
+        for i, (ax, ay, sp) in enumerate([(0.2, 0.25, 0.13), (0.8, 0.6, 0.09), (0.4, 0.85, 0.11)]):
+            x = int(W * ax + 160 * math.sin(t * sp * 2 * math.pi + i)) - 350
+            y = int(H * ay + 120 * math.cos(t * sp * 2 * math.pi + i * 2)) - 350
+            img.paste(self.glow, (x, y), self.blob)
+        return img
+
+
+# ---------- drawing helpers ----------
+
+def text_center(d, xy, text, size, fill, stroke=0, stroke_fill=(0, 0, 0)):
+    d.text(xy, text, font=font(size), fill=fill, anchor="mm", stroke_width=stroke, stroke_fill=stroke_fill)
+
+
+def pop_text(d, xy, text, size, fill, t, delay=0.0, stroke=6):
+    """Text that springs in with a slight overshoot."""
+    p = t - delay
+    if p <= 0:
+        return
+    s = back_out(p / 0.35)
+    text_center(d, xy, text, size * s, fill, stroke=stroke, stroke_fill=(0, 40, 20))
+
+
+def draw_cup(img, cx, cy, scale, t):
     d = ImageDraw.Draw(img)
-    for y in range(H):
-        d.line([(0, y), (W, y)], fill=mix(top, bottom, y / H))
-    return img
+    s = scale
+    body = [cx - 120 * s, cy - 90 * s, cx + 120 * s, cy + 150 * s]
+    d.rounded_rectangle(body, radius=40 * s, fill=(250, 246, 238))
+    d.ellipse([cx + 90 * s, cy - 30 * s, cx + 190 * s, cy + 90 * s], outline=(250, 246, 238), width=int(26 * s))
+    d.ellipse([cx - 110 * s, cy - 110 * s, cx + 110 * s, cy - 60 * s], fill=(111, 66, 36))
+    d.rounded_rectangle([cx - 120 * s, cy + 10 * s, cx + 120 * s, cy + 60 * s], radius=6, fill=(15, 157, 88))
+    for k in range(3):
+        x0 = cx - 60 * s + k * 60 * s
+        pts = []
+        for j in range(12):
+            yy = cy - 130 * s - j * 14 * s
+            xx = x0 + 14 * s * math.sin(j * 0.8 + t * 5 + k)
+            pts.append((xx, yy))
+        d.line(pts, fill=(255, 255, 255), width=int(10 * s), joint="curve")
 
 
-def wrap(draw, text, fnt, max_w):
-    words, lines, cur = text.split(), [], ""
-    for w in words:
-        trial = f"{cur} {w}".strip()
-        if draw.textlength(trial, font=fnt) <= max_w:
-            cur = trial
-        else:
-            lines.append(cur)
-            cur = w
-    if cur:
-        lines.append(cur)
-    return lines
+class Coins:
+    """A burst of coins that fall when a big number lands."""
 
+    def __init__(self, n=40, seed=3):
+        r = random.Random(seed)
+        self.parts = [(r.uniform(SAFE_LEFT, SAFE_RIGHT), r.uniform(-900, -60), r.uniform(26, 46), r.uniform(0, 6))
+                      for _ in range(n)]
 
-# Keep content clear of the TikTok/Shorts overlays: top bar, right-side buttons, bottom caption.
-SAFE_LEFT, SAFE_RIGHT, SAFE_TOP, SAFE_BOTTOM = 80, W - 190, 260, H - 420
+    def draw(self, d, t, cx, cy, color):
+        if t < 0 or t > 2.2:
+            return
+        for x0, y0, r, ph in self.parts:
+            x = x0 + 30 * math.sin(ph + t * 3)
+            y = y0 + 700 * t + 500 * t * t
+            squash = abs(math.cos(ph + t * 8))
+            d.ellipse([x - r, y - r * squash, x + r, y + r * squash], fill=color, outline=(190, 130, 0), width=4)
 
 
 def draw_clock(d, theme, progress, total):
     """The channel's signature: a stopwatch ring that drains as the video plays."""
-    cx, cy, r = (SAFE_LEFT + SAFE_RIGHT) // 2, SAFE_TOP + 60, 60
-    accent = hex_rgb(theme["accent"])
-    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=(255, 255, 255, 90), width=10)
+    cx, cy, r = CX, SAFE_TOP + 50, 46
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=(255, 255, 255), width=6)
     end = -90 + 360 * (1 - progress)
     if end > -90:
-        d.arc([cx - r, cy - r, cx + r, cy + r], start=-90, end=end, fill=accent, width=12)
-    secs = max(0, round(total * (1 - progress)))
-    f = font(44)
-    d.text((cx, cy), str(secs), font=f, fill="white", anchor="mm")
+        d.arc([cx - r, cy - r, cx + r, cy + r], start=-90, end=end, fill=rgb(theme["accent"]), width=10)
+    text_center(d, (cx, cy), str(max(0, math.ceil(total * (1 - progress)))), 34, (255, 255, 255))
 
 
-def draw_footer(d, theme, spec):
-    cx = (SAFE_LEFT + SAFE_RIGHT) // 2
-    d.text((cx, SAFE_BOTTOM - 90), spec["handle"], font=font(40), fill=hex_rgb(theme["muted"]), anchor="mm")
-    if spec.get("disclaimer"):
-        for i, line in enumerate(wrap(d, spec["disclaimer"], font(28, False), SAFE_RIGHT - SAFE_LEFT)):
-            d.text((cx, SAFE_BOTTOM - 40 + i * 36), line, font=font(28, False), fill=hex_rgb(theme["muted"]), anchor="mm")
+# ---------- captions ----------
+
+def caption_chunks(words, max_chars=16):
+    chunks, cur, length = [], [], 0
+    for i, w in enumerate(words):
+        if cur and length + 1 + len(w) > max_chars:
+            chunks.append(cur)
+            cur, length = [], 0
+        cur.append(i)
+        length += len(w) + (1 if length else 0)
+        if w[-1] in ".,?!":
+            chunks.append(cur)
+            cur, length = [], 0
+    if cur:
+        chunks.append(cur)
+    return chunks
 
 
-def render_text(d, theme, scene, t):
-    lines = scene["lines"]
-    blocks = []
-    for ln in lines:
-        fnt = font(ln.get("size", 90))
-        text = ln["text"]
-        if "count_to" in ln:
-            p = ease_out((t - ln.get("at", 0)) / ln.get("count_dur", 1.2))
-            text = text.format(ln.get("prefix", "") + f"{ln['count_to'] * p:,.0f}")
-        wrapped = wrap(d, text, fnt, SAFE_RIGHT - SAFE_LEFT)
-        blocks.append((ln, fnt, wrapped))
-    total_h = sum(len(w) * f.size * 1.2 + 40 for _, f, w in blocks)
-    cx = (SAFE_LEFT + SAFE_RIGHT) / 2
-    y = (SAFE_TOP + SAFE_BOTTOM) / 2 - total_h / 2
-    for ln, fnt, wrapped in blocks:
-        appear = ease_out((t - ln.get("at", 0)) / 0.35)
-        if appear <= 0:
-            y += len(wrapped) * fnt.size * 1.2 + 40
-            continue
-        color = hex_rgb(theme.get(ln.get("color", "text"), theme["text"]))
-        color = mix(hex_rgb(theme["bg_top"]), color, appear)
-        offset = (1 - appear) * 60
-        for w in wrapped:
-            d.text((cx, y + offset + fnt.size * 0.6), w, font=fnt, fill=color, anchor="mm")
-            y += fnt.size * 1.2
-        y += 40
+def word_times(words, dur):
+    """Spread words across the voice clip by length (a close fit for steady narration)."""
+    weights = [len(w) + 2 + (6 if w[-1] in ".,?!" else 0) for w in words]
+    total = sum(weights)
+    starts, acc = [], 0
+    for w in weights:
+        starts.append(dur * acc / total)
+        acc += w
+    return starts
 
 
-def render_bars(d, theme, scene, t):
-    values = scene["values"]
-    labels = scene.get("labels", {})
+def draw_captions(d, theme, words, starts, t):
+    if not words or t < 0:
+        return
+    current = max(i for i, s in enumerate(starts) if s <= t) if t >= starts[0] else 0
+    chunk = next(c for c in caption_chunks(words) if current in c)
+    size = 76
+    f = font(size)
+    texts = [words[i].upper() for i in chunk]
+    widths = [d.textlength(x, font=f) for x in texts]
+    space = d.textlength(" ", font=f)
+    total = sum(widths) + space * (len(texts) - 1)
+    if total > SAFE_RIGHT - SAFE_LEFT:
+        size = int(size * (SAFE_RIGHT - SAFE_LEFT) / total)
+        f = font(size)
+        widths = [d.textlength(x, font=f) for x in texts]
+        space = d.textlength(" ", font=f)
+        total = sum(widths) + space * (len(texts) - 1)
+    x = CX - total / 2
+    for i, txt, w in zip(chunk, texts, widths):
+        active = i == current
+        color = rgb(theme["accent"]) if active else (255, 255, 255)
+        bump = 1.0 + (0.12 * (1 - clamp((t - starts[i]) / 0.18)) if active else 0)
+        d.text((x + w / 2, CAPTION_Y), txt, font=font(size * bump), fill=color, anchor="mm",
+               stroke_width=8, stroke_fill=(0, 0, 0))
+        x += w + space
+
+
+# ---------- visuals ----------
+
+def visual_hero(img, d, theme, v, t, dur):
+    draw_cup(img, CX, VISUAL_Y - 40, 1.0 + 0.03 * math.sin(t * 3), t)
+    if "big" in v:
+        pop_text(d, (CX, VISUAL_Y + 260), v["big"], 150, rgb(theme["accent"]), t, delay=v.get("big_at", 0.8))
+
+
+def visual_counter(img, d, theme, v, t, dur):
+    run = v.get("run", 1.6)
+    start = v.get("start_at", 0.3)
+    p = ease_out((t - start) / run)
+    value = v["from"] + (v["to"] - v["from"]) * p
+    label = v.get("label")
+    if label:
+        pop_text(d, (CX, VISUAL_Y - 170), label, 64, (255, 255, 255), t, stroke=5)
+    landed = t - start - run
+    if v.get("coins"):
+        v.setdefault("_coins", Coins()).draw(d, landed, CX, VISUAL_Y, rgb(theme["accent"]))
+    scale = 1.0 + (0.18 * math.exp(-landed * 6) if landed > 0 else 0)
+    text_center(d, (CX, VISUAL_Y + 10), f"${value:,.0f}", 150 * scale, rgb(theme["accent"]),
+                stroke=8, stroke_fill=(0, 40, 20))
+
+
+def visual_stack(img, d, theme, v, t, dur):
+    lines = v["lines"]
+    gap = 150
+    y0 = VISUAL_Y - gap * (len(lines) - 1) / 2
+    for i, ln in enumerate(lines):
+        at = ln.get("at", i * dur / (len(lines) + 0.5))
+        color = rgb(theme["accent"]) if ln.get("accent") else (255, 255, 255)
+        pop_text(d, (CX, y0 + i * gap), ln["text"], ln.get("size", 100), color, t, delay=at)
+
+
+def visual_chart(img, d, theme, v, t, dur):
+    values, marks = v["values"], v.get("marks", {})
     top_v = max(values)
-    left, right, base, height = SAFE_LEFT + 20, SAFE_RIGHT - 20, SAFE_BOTTOM - 240, 640
-    cx = (SAFE_LEFT + SAFE_RIGHT) / 2
+    left, right = SAFE_LEFT + 20, SAFE_RIGHT - 20
+    base, height = VISUAL_Y + 300, 520
     n = len(values)
-    gap = 6
-    bw = (right - left) / n - gap
-    grow = ease_out(t / (scene["dur"] * 0.8))
-    shown = values[: max(1, int(n * grow))]
-    accent, text = hex_rgb(theme["accent"]), hex_rgb(theme["text"])
-    d.text((cx, SAFE_TOP + 190), scene["title"], font=font(52), fill=text, anchor="mm")
-    for i, v in enumerate(shown):
-        x = left + i * (bw + gap)
-        h = height * v / top_v
-        d.rectangle([x, base - h, x + bw, base], fill=accent)
-        if i in labels:
-            d.text((x + bw / 2, base + 50), labels[i], font=font(34), fill=text, anchor="mm")
-    current = shown[-1]
-    d.text((cx, SAFE_TOP + 320), f"${current:,.0f}", font=font(120), fill=accent, anchor="mm")
+    bw = (right - left) / n
+    grow = ease_out(t / (dur * 0.85))
+    shown = max(1, int(n * grow))
+    accent = rgb(theme["accent"])
+    for i in range(shown):
+        h = height * values[i] / top_v
+        x = left + i * bw
+        shade = mix((255, 240, 180), accent, i / n)
+        d.rounded_rectangle([x + 3, base - h, x + bw - 3, base], radius=6, fill=shade)
+    d.line([(left, base + 4), (right, base + 4)], fill=(255, 255, 255), width=4)
+    for i, label in marks.items():
+        if i < shown:
+            x = left + i * bw + bw / 2
+            text_center(d, (x, base + 44), label, 34, (255, 255, 255), stroke=3)
+    text_center(d, (CX, VISUAL_Y - 300), f"${values[shown - 1]:,.0f}", 120, accent, stroke=8, stroke_fill=(0, 40, 20))
 
 
-RENDERERS = {"text": render_text, "bars": render_bars}
+def visual_cta(img, d, theme, v, t, dur):
+    logo = v.get("_logo")
+    if logo is None:
+        src = Image.open(os.path.join(ASSETS, "branding", "cents-in-sixty.png")).convert("RGB")
+        mask = Image.new("L", src.size, 0)
+        ImageDraw.Draw(mask).ellipse([0, 0, src.size[0], src.size[1]], fill=255)
+        v["_logo"] = logo = (src, mask)
+    s = back_out(t / 0.45)
+    if s > 0.05:
+        size = int(360 * s)
+        img.paste(logo[0].resize((size, size)), (CX - size // 2, VISUAL_Y - 120 - size // 2),
+                  logo[1].resize((size, size)))
+    pop_text(d, (CX, VISUAL_Y + 190), v.get("text", "FOLLOW"), 84, rgb(theme["accent"]), t, delay=0.5)
 
 
-def render(spec, out_path, fps=30):
-    theme = spec["theme"]
-    bg = background(theme)
-    total = sum(s["dur"] for s in spec["scenes"])
-    cmd = [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-loglevel", "error",
-           "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(fps), "-i", "-",
-           "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20", "-movflags", "+faststart", out_path]
-    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
-    elapsed = 0.0
+VISUALS = {"hero": visual_hero, "counter": visual_counter, "stack": visual_stack,
+           "chart": visual_chart, "cta": visual_cta}
+
+
+# ---------- main ----------
+
+def build_audio(spec):
+    """Voice every scene, then lay voice, music and sound effects on one track."""
+    lead, tail = 0.15, spec.get("scene_gap", 0.25)
+    clips, t = [], 0.0
     for scene in spec["scenes"]:
-        frames = int(scene["dur"] * fps)
-        for f in range(frames):
-            t = f / fps
-            img = bg.copy()
+        clip = audio.speak(scene["say"], voice=spec.get("voice", "af_heart"), speed=spec.get("speed", 1.08))
+        dur = lead + len(clip) / audio.SR + tail
+        clips.append((t + lead, clip))
+        scene["_start"], scene["_dur"], scene["_voice_dur"] = t, dur, len(clip) / audio.SR
+        t += dur
+    total = t + 0.6
+    track = np.zeros(int(total * audio.SR) + audio.SR, dtype=np.float32)
+    music = audio.music_bed(total)
+    track[: len(music)] += music * spec.get("music_gain", 0.55)
+    for at, clip in clips:
+        audio.place(track, clip, at, gain=1.0)
+    for scene in spec["scenes"]:
+        for kind, offset in scene.get("sfx", []):
+            audio.place(track, audio.sfx(kind), scene["_start"] + offset)
+    peak = np.max(np.abs(track)) or 1
+    return track / peak * 0.9, total
+
+
+def render(spec, out_path):
+    theme = spec["theme"]
+    track, total = build_audio(spec)
+    bg = Background(theme)
+    with tempfile.TemporaryDirectory() as tmp:
+        wav = os.path.join(tmp, "a.wav")
+        silent = os.path.join(tmp, "v.mp4")
+        sf.write(wav, track, audio.SR)
+        ff = imageio_ffmpeg.get_ffmpeg_exe()
+        proc = subprocess.Popen([ff, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
+                                 "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-", "-c:v", "libx264",
+                                 "-pix_fmt", "yuv420p", "-crf", "19", silent], stdin=subprocess.PIPE)
+        n_frames = int(total * FPS)
+        scenes = spec["scenes"]
+        for scene in scenes:
+            scene["_words"] = scene["say"].split()
+            scene["_starts"] = word_times(scene["_words"], scene["_voice_dur"])
+        for f in range(n_frames):
+            now = f / FPS
+            scene = next((s for s in scenes if s["_start"] <= now < s["_start"] + s["_dur"]), scenes[-1])
+            t = now - scene["_start"]
+            img = bg.frame(now)
             d = ImageDraw.Draw(img)
-            RENDERERS[scene["type"]](d, theme, scene, t)
-            draw_clock(d, theme, (elapsed + t) / total, total)
-            draw_footer(d, theme, spec)
+            VISUALS[scene["visual"]["kind"]](img, d, theme, scene["visual"], t, scene["_dur"])
+            draw_captions(d, theme, scene["_words"], scene["_starts"], t - 0.15)
+            draw_clock(d, theme, now / total, total)
+            text_center(d, (CX, SAFE_BOTTOM - 20), spec["handle"], 36, (255, 255, 255))
             proc.stdin.write(img.tobytes())
-        elapsed += scene["dur"]
-    proc.stdin.close()
-    proc.wait()
+        proc.stdin.close()
+        proc.wait()
+        subprocess.run([ff, "-y", "-loglevel", "error", "-i", silent, "-i", wav, "-c:v", "copy",
+                        "-af", "loudnorm=I=-14:TP=-1.5:LRA=11", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", out_path], check=True)
     return total

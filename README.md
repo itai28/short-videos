@@ -4,7 +4,9 @@ Makes original short videos for our channels and, later, schedules them through 
 
 ## Make a video
 
-    python3 -m pip install pillow imageio-ffmpeg
+Voiceover uses the open Kokoro-82M model (Apache-2.0). Download `kokoro-v1.0.onnx` and `voices-v1.0.bin` from https://github.com/thewh1teagle/kokoro-onnx/releases (model-files-v1.0) into a folder and set `KOKORO_DIR` to it.
+
+    python3 -m pip install pillow imageio-ffmpeg numpy soundfile kokoro-onnx
     python3 make_video.py scripts/cents_001_coffee.py
 
 Output goes to `videos/<channel>/`: the MP4 plus a JSON file holding the title, caption and asset/license log.
@@ -18,6 +20,6 @@ Output goes to `videos/<channel>/`: the MP4 plus a JSON file holding the title, 
 
 ## Next
 
-1. Voiceover (licensed TTS; needs an API key) and music from the YouTube Audio Library / TikTok Commercial Music Library.
+1. Swap the generated music bed for a library track when posting, if you prefer.
 2. A 60 to 75 second TikTok cut, so videos qualify for Creator Rewards.
 3. Approval queue, then uploaders using YouTube Data API and TikTok Content Posting API with OAuth. No passwords are stored.

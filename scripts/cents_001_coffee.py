@@ -1,6 +1,6 @@
 """Cents in Sixty #001 - Receipt autopsy: the $6 coffee."""
 from studio.channels import CENTS_IN_SIXTY
-from studio.finance import money, yearly_balances
+from studio.finance import money, spoken_dollars, spoken_thousands, yearly_balances
 
 PRICE, DAYS_PER_YEAR, RATE, YEARS = 6, 5 * 52, 0.07, 30
 yearly = PRICE * DAYS_PER_YEAR
@@ -8,42 +8,43 @@ balances = yearly_balances(yearly, RATE, YEARS)
 final = balances[-1]
 
 TITLE = f"Your $6 coffee costs {money(final)}"
-CAPTION = (f"$6 a workday is {money(yearly)} a year. Invested at 7% for 30 years, that's {money(final)}. "
-           "Not saying quit coffee, just know the price. #money #personalfinance #investing")
+CAPTION = (f"$6 a workday = {money(yearly)} a year. Invested at 7% for 30 years = {money(final)}. "
+           "What's your daily habit? I'll run your numbers next. "
+           "(Illustration assuming a 7% average yearly return. Not financial advice.) "
+           "#money #personalfinance #investing #coffee")
 
 SPEC = {
     **CENTS_IN_SIXTY,
-    "disclaimer": "Illustration: assumes 7% average yearly return, invested once a year. Not financial advice.",
     "scenes": [
-        {"type": "text", "dur": 3.5, "lines": [
-            {"text": "Your $6 coffee", "size": 110},
-            {"text": "really costs", "size": 80, "at": 0.4},
-            {"text": "{}", "count_to": round(final), "prefix": "$", "size": 150, "color": "accent", "at": 0.8, "count_dur": 2.2},
-        ]},
-        {"type": "text", "dur": 4, "lines": [
-            {"text": "$6", "size": 150, "color": "accent"},
-            {"text": "x 5 workdays x 52 weeks", "size": 70, "at": 0.5},
-            {"text": f"= {money(yearly)} a year", "size": 100, "at": 1.4},
-        ]},
-        {"type": "text", "dur": 4, "lines": [
-            {"text": "Now invest it instead", "size": 90},
-            {"text": "at 7% a year", "size": 90, "color": "accent", "at": 0.6},
-            {"text": "(about the long-run stock market average after inflation)", "size": 46, "at": 1.4},
-        ]},
-        {"type": "bars", "dur": 7, "title": "Your coffee money, invested", "values": balances[1:],
-         "labels": {0: "Yr 1", 9: "Yr 10", 19: "Yr 20", 29: "Yr 30"}},
-        {"type": "text", "dur": 5, "lines": [
-            {"text": f"Year 10: {money(balances[10])}", "size": 80},
-            {"text": f"Year 20: {money(balances[20])}", "size": 80, "at": 0.6},
-            {"text": f"Year 30: {money(balances[30])}", "size": 100, "color": "accent", "at": 1.2},
-        ]},
-        {"type": "text", "dur": 4.5, "lines": [
-            {"text": "Not saying quit coffee.", "size": 90},
-            {"text": "Just know the price.", "size": 90, "color": "accent", "at": 0.8},
-        ]},
-        {"type": "text", "dur": 3, "lines": [
-            {"text": "What's your $6 habit?", "size": 90},
-            {"text": "Comment it. I'll run the numbers.", "size": 60, "color": "accent", "at": 0.5},
-        ]},
+        {"say": f"Your six dollar coffee is quietly costing you {spoken_thousands(final)} dollars.",
+         "visual": {"kind": "hero", "big": "$6", "big_at": 0.5},
+         "sfx": [("pop", 0.5)]},
+        {"say": "Here's the math. Six bucks, five workdays a week, fifty-two weeks a year.",
+         "visual": {"kind": "stack", "lines": [
+             {"text": "$6", "size": 130, "accent": True, "at": 0.9},
+             {"text": "x 5 days", "size": 100, "at": 1.9},
+             {"text": "x 52 weeks", "size": 100, "at": 3.0}]},
+         "sfx": [("pop", 0.9), ("pop", 1.9), ("pop", 3.0)]},
+        {"say": f"That's {spoken_dollars(yearly)} a year. Doesn't sound like much, right?",
+         "visual": {"kind": "counter", "from": 0, "to": yearly, "label": "per year", "run": 1.2},
+         "sfx": [("whoosh", 0.0), ("ding", 1.5)]},
+        {"say": "But put that same money into an index fund, earning about seven percent a year.",
+         "visual": {"kind": "stack", "lines": [
+             {"text": "Index fund", "size": 100, "at": 1.2},
+             {"text": "~7% / year", "size": 130, "accent": True, "at": 2.8}]},
+         "sfx": [("whoosh", 0.0), ("pop", 2.8)]},
+        {"say": f"After ten years, you'd have about {spoken_thousands(balances[10])}. "
+                f"After twenty, around {spoken_thousands(balances[20])}.",
+         "visual": {"kind": "chart", "values": balances[1:21], "marks": {0: "Yr 1", 9: "Yr 10", 19: "Yr 20"}},
+         "sfx": [("whoosh", 0.0)]},
+        {"say": f"And after thirty years? {spoken_thousands(final).capitalize()} dollars. From coffee.",
+         "visual": {"kind": "counter", "from": balances[20], "to": final, "label": "after 30 years",
+                    "start_at": 0.8, "run": 1.4, "coins": True},
+         "sfx": [("whoosh", 0.0), ("ding", 2.2)]},
+        {"say": "I'm not telling you to quit coffee. I'm telling you to know what it really costs.",
+         "visual": {"kind": "hero"}},
+        {"say": "Drop your daily habit in the comments, and I'll run your numbers next. Follow for more.",
+         "visual": {"kind": "cta", "text": "FOLLOW"},
+         "sfx": [("pop", 0.1)]},
     ],
 }
