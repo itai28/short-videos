@@ -31,7 +31,7 @@ SPEC = {
         {"say": "But put that same money into an index fund, earning about seven percent a year.",
          "visual": {"kind": "stack", "lines": [
              {"text": "Index fund", "size": 100, "at": 1.2},
-             {"text": "~7% / year", "size": 130, "accent": True, "at": 2.8}]},
+             {"text": "~7% / year", "size": 110, "accent": True, "at": 2.8}]},
          "sfx": [("whoosh", 0.0), ("pop", 2.8)]},
         {"say": f"After ten years, you'd have about {spoken_thousands(balances[10])}. "
                 f"After twenty, around {spoken_thousands(balances[20])}.",

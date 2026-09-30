@@ -16,17 +16,18 @@ import soundfile as sf
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from studio import audio
+from studio.studio_scene import Studio, draw_presenter, mouth_curve
 
 W, H = 1080, 1920
-FPS = 30
+FPS = 60
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 ASSETS = os.path.join(os.path.dirname(__file__), "..", "assets")
 
 # Keep content clear of the TikTok/Shorts overlays: top bar, right-side buttons, bottom caption.
 SAFE_LEFT, SAFE_RIGHT, SAFE_TOP, SAFE_BOTTOM = 80, W - 190, 260, H - 420
 CX = (SAFE_LEFT + SAFE_RIGHT) // 2
-VISUAL_Y = 720            # centre of the visual area
-CAPTION_Y = 1300          # centre of the caption line
+VISUAL_Y = 635            # centre of the monitor panel
+CAPTION_Y = 1452          # caption line, on the desk front
 
 _fonts = {}
 
@@ -137,7 +138,7 @@ class Coins:
 
 def draw_clock(d, theme, progress, total):
     """The channel's signature: a stopwatch ring that drains as the video plays."""
-    cx, cy, r = CX, SAFE_TOP + 50, 46
+    cx, cy, r = SAFE_RIGHT - 50, 340, 40
     d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=(255, 255, 255), width=6)
     end = -90 + 360 * (1 - progress)
     if end > -90:
@@ -195,8 +196,8 @@ def draw_captions(d, theme, words, starts, t):
     for i, txt, w in zip(chunk, texts, widths):
         active = i == current
         color = rgb(theme["accent"]) if active else (255, 255, 255)
-        bump = 1.0 + (0.12 * (1 - clamp((t - starts[i]) / 0.18)) if active else 0)
-        d.text((x + w / 2, CAPTION_Y), txt, font=font(size * bump), fill=color, anchor="mm",
+        lift = 8 * (1 - clamp((t - starts[i]) / 0.18)) if active else 0
+        d.text((x + w / 2, CAPTION_Y - lift), txt, font=font(size), fill=color, anchor="mm",
                stroke_width=8, stroke_fill=(0, 0, 0))
         x += w + space
 
@@ -204,9 +205,9 @@ def draw_captions(d, theme, words, starts, t):
 # ---------- visuals ----------
 
 def visual_hero(img, d, theme, v, t, dur):
-    draw_cup(img, CX, VISUAL_Y - 40, 1.0 + 0.03 * math.sin(t * 3), t)
+    draw_cup(img, CX, VISUAL_Y - 10, 0.85 + 0.03 * math.sin(t * 3), t)
     if "big" in v:
-        pop_text(d, (CX, VISUAL_Y + 260), v["big"], 150, rgb(theme["accent"]), t, delay=v.get("big_at", 0.8))
+        pop_text(d, (CX, VISUAL_Y + 225), v["big"], 130, rgb(theme["accent"]), t, delay=v.get("big_at", 0.8))
 
 
 def visual_counter(img, d, theme, v, t, dur):
@@ -239,7 +240,7 @@ def visual_chart(img, d, theme, v, t, dur):
     values, marks = v["values"], v.get("marks", {})
     top_v = max(values)
     left, right = SAFE_LEFT + 20, SAFE_RIGHT - 20
-    base, height = VISUAL_Y + 300, 520
+    base, height = VISUAL_Y + 245, 420
     n = len(values)
     bw = (right - left) / n
     grow = ease_out(t / (dur * 0.85))
@@ -255,7 +256,7 @@ def visual_chart(img, d, theme, v, t, dur):
         if i < shown:
             x = left + i * bw + bw / 2
             text_center(d, (x, base + 44), label, 34, (255, 255, 255), stroke=3)
-    text_center(d, (CX, VISUAL_Y - 300), f"${values[shown - 1]:,.0f}", 120, accent, stroke=8, stroke_fill=(0, 40, 20))
+    text_center(d, (CX, VISUAL_Y - 245), f"${values[shown - 1]:,.0f}", 100, accent, stroke=8, stroke_fill=(0, 40, 20))
 
 
 def visual_cta(img, d, theme, v, t, dur):
@@ -291,21 +292,25 @@ def build_audio(spec):
         t += dur
     total = t + 0.6
     track = np.zeros(int(total * audio.SR) + audio.SR, dtype=np.float32)
+    voice = np.zeros_like(track)
     music = audio.music_bed(total)
     track[: len(music)] += music * spec.get("music_gain", 0.55)
     for at, clip in clips:
         audio.place(track, clip, at, gain=1.0)
+        audio.place(voice, clip, at, gain=1.0)
     for scene in spec["scenes"]:
         for kind, offset in scene.get("sfx", []):
             audio.place(track, audio.sfx(kind), scene["_start"] + offset)
     peak = np.max(np.abs(track)) or 1
-    return track / peak * 0.9, total
+    return track / peak * 0.9, voice, total
 
 
 def render(spec, out_path):
     theme = spec["theme"]
-    track, total = build_audio(spec)
-    bg = Background(theme)
+    track, voice, total = build_audio(spec)
+    studio = Studio()
+    mouths = mouth_curve(voice, audio.SR, FPS, int(total * FPS) + 1)
+    hits = [s["_start"] + off for s in spec["scenes"] for _, off in s.get("sfx", [])]
     with tempfile.TemporaryDirectory() as tmp:
         wav = os.path.join(tmp, "a.wav")
         silent = os.path.join(tmp, "v.mp4")
@@ -313,7 +318,7 @@ def render(spec, out_path):
         ff = imageio_ffmpeg.get_ffmpeg_exe()
         proc = subprocess.Popen([ff, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
                                  "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-", "-c:v", "libx264",
-                                 "-pix_fmt", "yuv420p", "-crf", "19", silent], stdin=subprocess.PIPE)
+                                 "-pix_fmt", "yuv420p", "-crf", "20", silent], stdin=subprocess.PIPE)
         n_frames = int(total * FPS)
         scenes = spec["scenes"]
         for scene in scenes:
@@ -323,15 +328,17 @@ def render(spec, out_path):
             now = f / FPS
             scene = next((s for s in scenes if s["_start"] <= now < s["_start"] + s["_dur"]), scenes[-1])
             t = now - scene["_start"]
-            img = bg.frame(now)
+            img = studio.frame(now)
             d = ImageDraw.Draw(img)
             VISUALS[scene["visual"]["kind"]](img, d, theme, scene["visual"], t, scene["_dur"])
-            draw_captions(d, theme, scene["_words"], scene["_starts"], t - 0.15)
             draw_clock(d, theme, now / total, total)
-            text_center(d, (CX, SAFE_BOTTOM - 20), spec["handle"], 36, (255, 255, 255))
+            bounce = max([math.exp(-(now - h) * 9) for h in hits if 0 <= now - h < 0.6] or [0])
+            draw_presenter(img, now, float(mouths[f]), bounce)
+            d = ImageDraw.Draw(img)
+            draw_captions(d, theme, scene["_words"], scene["_starts"], t - 0.15)
             proc.stdin.write(img.tobytes())
         proc.stdin.close()
         proc.wait()
         subprocess.run([ff, "-y", "-loglevel", "error", "-i", silent, "-i", wav, "-c:v", "copy",
-                        "-af", "loudnorm=I=-14:TP=-1.5:LRA=11", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", out_path], check=True)
+                        "-af", "loudnorm=I=-14:TP=-1.5:LRA=11", "-ar", "48000", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", out_path], check=True)
     return total
