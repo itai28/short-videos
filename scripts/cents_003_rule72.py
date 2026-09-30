@@ -1,38 +1,49 @@
-"""Cents in Sixty #003 - the Rule of 72 cheat code."""
-import math
-
+"""Cents in Sixty #003 - the Rule of 72."""
 from studio.channels import CENTS_IN_SIXTY
+from studio.finance import future_value, money
 
-exact_7 = math.log(2) / math.log(1.07)
+at_1 = future_value(1000, 0.01, 72)
+at_7 = future_value(1000, 0.07, 72)
 
-TITLE = "The money cheat code nobody taught you (Rule of 72)"
-CAPTION = (f"Rule of 72: divide 72 by your interest rate to see how many years it takes your money to double. "
-           f"At 7% that's about {exact_7:.0f} years; at 1% it's 72 years. "
-           "Save this and show your parents. #money #personalfinance #fintok #moneytips")
+TITLE = "Is your savings account taking 72 years to double your money?"
+CAPTION = (f"Rule of 72: 72 ÷ interest rate ≈ years to double. 1% → about 72 years. 7% → about 10 years. "
+           f"$1,000 left for 72 years: {money(at_1)} at 1% vs {money(at_7)} at 7%. "
+           "7% is an assumed long-run stock average, not guaranteed; markets can drop. Not financial advice. "
+           "#ruleof72 #investing #personalfinance #moneytips")
 
 SPEC = {
     **CENTS_IN_SIXTY,
+    "note": "7% = historical average, not guaranteed",
     "scenes": [
-        {"say": "Here's a money cheat code they don't teach you in school.",
-         "visual": {"kind": "hero", "icon": "gamepad"}, "sfx": [("pop", 0.2)]},
-        {"say": "It's called the rule of seventy-two. Take seventy-two, and divide it by your interest rate.",
-         "visual": {"kind": "stack", "lines": [{"text": "72", "size": 150, "accent": True, "at": 0.8},
-                                               {"text": "÷ interest rate", "size": 90, "at": 2.6}]},
-         "sfx": [("pop", 0.8), ("pop", 2.6)]},
-        {"say": "The answer is how many years it takes your money to double.",
-         "visual": {"kind": "stack", "lines": [{"text": "= years to", "size": 90}, {"text": "DOUBLE", "size": 140, "accent": True, "at": 1.0}]},
-         "sfx": [("ding", 1.0)]},
-        {"say": "A normal bank account paying one percent? Seventy-two years to double. You'd be old.",
-         "visual": {"kind": "stack", "lines": [{"text": "Bank: 1%", "size": 100},
-                                               {"text": "72 years", "size": 130, "accent": True, "at": 1.4}]},
-         "sfx": [("whoosh", 0.0), ("pop", 1.4)]},
-        {"say": "The stock market's long-run average of about seven percent? Around ten years.",
-         "visual": {"kind": "stack", "lines": [{"text": "Stocks: ~7%", "size": 100},
-                                               {"text": "~10 years", "size": 130, "accent": True, "at": 1.6}]},
-         "sfx": [("whoosh", 0.0), ("pop", 1.6)]},
-        {"say": "Same money. One choice makes it double seven times faster.",
-         "visual": {"kind": "hero", "icon": "rocket"}},
-        {"say": "Save this, and show it to someone who still keeps everything in a savings account.",
-         "visual": {"kind": "cta", "text": "SAVE THIS"}, "sfx": [("pop", 0.1)]},
+        {"say": "Your savings account might take seventy-two years to double your money.", "speed": 1.15, "lean": True,
+         "expr": "shocked", "cap": "Your savings account might take 72 years to double your money.",
+         "visual": {"kind": "stack", "lines": [{"text": "72 YEARS", "size": 200, "accent": True},
+                                               {"text": "to double?!", "size": 110, "at": 0.6}]},
+         "sfx": [("ding", 0.0), ("pop", 0.6)]},
+        {"say": "Save this. Here's how to check any account in two seconds.", "expr": "smug",
+         "cap": "Save this. Here's how to check any account in 2 seconds.",
+         "visual": {"kind": "stack", "lines": [{"text": "SAVE THIS", "size": 150, "accent": True},
+                                               {"text": "2-second check", "size": 100, "at": 0.8}]},
+         "sfx": [("pop", 0.8)]},
+        {"say": "Seventy-two, divided by the interest rate, is the years to double.",
+         "cap": "72, divided by the interest rate, is the years to double.",
+         "visual": {"kind": "stack", "lines": [{"text": "72 ÷ rate", "size": 160, "accent": True},
+                                               {"text": "= years to double", "size": 96, "at": 1.2}]},
+         "sfx": [("pop", 1.2)]},
+        {"say": "Savings paying one percent? Seventy-two years.", "expr": "worried",
+         "cap": "Savings paying 1%? 72 years.",
+         "visual": {"kind": "stack", "lines": [{"text": "1%", "size": 150}, {"text": "72 years", "size": 150, "accent": True, "at": 0.9}]},
+         "sfx": [("pop", 0.9)]},
+        {"say": "⚡ Seven percent, like the stock market's long-run average? About ten years.", "note": True,
+         "cap": "7%, like the stock market's long-run average? About 10 years.",
+         "visual": {"kind": "stack", "lines": [{"text": "~7%", "size": 150}, {"text": "~10 years", "size": 150, "accent": True, "at": 0.8}]},
+         "sfx": [("pop", 0.8)]},
+        {"say": "A thousand dollars, left seventy-two years. ⏸ Two thousand, versus a hundred and thirty thousand.",
+         "note": True, "cap": f"$1,000, left 72 years. {money(at_1)}, versus {money(at_7)}.",
+         "visual": {"kind": "race", "lanes": [{"label": "$1,000 at 1%", "to": at_1, "from": 1000},
+                                              {"label": "$1,000 at 7%", "to": at_7, "from": 1000}],
+                    "start_at": "reveal", "run": 1.0, "verdict": f"{at_7 / at_1:.0f}x more"}},
+        {"say": "Now go check yours. Because…", "expr": "hype",
+         "visual": {"kind": "cta", "text": "CHECK YOUR RATE"}, "sfx": [("pop", 0.1)]},
     ],
 }

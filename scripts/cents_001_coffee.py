@@ -1,50 +1,42 @@
-"""Cents in Sixty #001 - Receipt autopsy: the $6 coffee."""
+"""Cents in Sixty #001 - the $6 coffee."""
 from studio.channels import CENTS_IN_SIXTY
-from studio.finance import money, spoken_dollars, spoken_thousands, yearly_balances
+from studio.finance import money, yearly_balances
 
 PRICE, DAYS_PER_YEAR, RATE, YEARS = 6, 5 * 52, 0.07, 30
 yearly = PRICE * DAYS_PER_YEAR
 balances = yearly_balances(yearly, RATE, YEARS)
 final = balances[-1]
+HOOK = {"kind": "pair", "small": "$6 coffee", "big": money(final), "label": "every workday, 30 yrs"}
 
-TITLE = f"Your $6 coffee costs {money(final)}"
-CAPTION = (f"$6 a workday = {money(yearly)} a year. Invested at 7% for 30 years = {money(final)}. "
-           "What's your daily habit? I'll run your numbers next. "
-           "(Illustration assuming a 7% average yearly return. Not financial advice.) "
-           "#money #personalfinance #fintok #investing")
+TITLE = f"Invest a $6 daily coffee for 30 years: {money(final)}"
+CAPTION = (f"$6 every workday = {money(yearly)}/yr. Invested at an assumed 7% average yearly return: "
+           f"about {money(balances[10])} after 10 years, {money(balances[20])} after 20, {money(final)} after 30. "
+           "What's your daily habit? Illustration only, returns not guaranteed. Not financial advice. "
+           "#personalfinance #investing #compoundinterest #moneytips")
 
 SPEC = {
     **CENTS_IN_SIXTY,
+    "note": "assumes ~7%/yr average · not guaranteed",
     "scenes": [
-        {"say": f"Your six dollar coffee is quietly costing you {spoken_thousands(final)} dollars.",
-         "visual": {"kind": "hero", "big": "$6", "big_at": 0.5},
-         "sfx": [("pop", 0.5)]},
-        {"say": "Here's the math. Six bucks, five workdays a week, fifty-two weeks a year.",
-         "visual": {"kind": "stack", "lines": [
-             {"text": "$6", "size": 130, "accent": True, "at": 0.9},
-             {"text": "x 5 days", "size": 100, "at": 1.9},
-             {"text": "x 52 weeks", "size": 100, "at": 3.0}]},
-         "sfx": [("pop", 0.9), ("pop", 1.9), ("pop", 3.0)]},
-        {"say": f"That's {spoken_dollars(yearly)} a year. Doesn't sound like much, right?",
-         "visual": {"kind": "counter", "from": 0, "to": yearly, "label": "per year", "run": 1.2},
-         "sfx": [("whoosh", 0.0), ("ding", 1.5)]},
-        {"say": "But put that same money into an index fund, earning about seven percent a year.",
-         "visual": {"kind": "stack", "lines": [
-             {"text": "Index fund", "size": 100, "at": 1.2},
-             {"text": "~7% / year", "size": 110, "accent": True, "at": 2.8}]},
-         "sfx": [("whoosh", 0.0), ("pop", 2.8)]},
-        {"say": f"After ten years, you'd have about {spoken_thousands(balances[10])}. "
-                f"After twenty, around {spoken_thousands(balances[20])}.",
-         "visual": {"kind": "chart", "values": balances[1:21], "marks": {0: "Yr 1", 9: "Yr 10", 19: "Yr 20"}},
-         "sfx": [("whoosh", 0.0)]},
-        {"say": f"And after thirty years? {spoken_thousands(final).capitalize()} dollars. From coffee.",
+        {"say": "This coffee costs way more than six dollars.", "speed": 1.18, "expr": "smug", "lean": True,
+         "visual": HOOK, "sfx": [("ding", 0.0)]},
+        {"say": "Six bucks every workday is fifteen hundred and sixty dollars a year.",
+         "cap": f"$6 every workday is {money(yearly)} a year.",
+         "visual": {"kind": "counter", "from": 0, "to": yearly, "label": "$6 x 5 days x 52 weeks", "start_at": 0.2, "run": 1.4},
+         "sfx": [("ding", 1.6)]},
+        {"say": "⚡ Now invest that instead, at an assumed seven percent average.", "expr": "smug", "note": True,
+         "cap": "Now invest that instead, at an assumed 7% average.",
+         "visual": {"kind": "stack", "lines": [{"text": "INVEST IT", "size": 150, "accent": True},
+                                               {"text": "~7% / year", "size": 110, "at": 0.8}]},
+         "sfx": [("pop", 0.8)]},
+        {"say": "Ten years: twenty-two thousand. Twenty: sixty-four thousand.", "note": True,
+         "cap": f"10 years: {money(balances[10])}. 20: {money(balances[20])}.",
+         "visual": {"kind": "chart", "values": balances[1:21], "marks": {0: "Yr 1", 9: "Yr 10", 19: "Yr 20"}}},
+        {"say": "Thirty years… ⏸ a hundred and forty-seven thousand dollars.", "speed": 1.0, "note": True,
+         "cap": f"30 years… {money(final)}.",
          "visual": {"kind": "counter", "from": balances[20], "to": final, "label": "after 30 years",
-                    "start_at": 0.8, "run": 1.4, "coins": True},
-         "sfx": [("whoosh", 0.0), ("ding", 2.2)]},
-        {"say": "I'm not telling you to quit coffee. I'm telling you to know what it really costs.",
-         "visual": {"kind": "hero"}},
-        {"say": "Drop your daily habit in the comments, and I'll run your numbers next. Follow for more.",
-         "visual": {"kind": "cta", "text": "FOLLOW"},
-         "sfx": [("pop", 0.1)]},
+                    "start_at": "reveal", "run": 0.7, "coins": True}},
+        # Ends mid-sentence into the hook, so the replay finishes the thought.
+        {"say": "I'm not saying give up coffee. Just know the real price, because…", "expr": "smug", "visual": HOOK},
     ],
 }

@@ -21,10 +21,10 @@ Short money videos that a 13 to 25 year old wants to send to a friend or show a 
 |---|------|---------------|
 | 001 | Your $6 coffee costs $147,359 | Tag the coffee friend |
 | 002 | $1M now, or a penny that doubles for 30 days? | Pick A or B in the comments |
-| 003 | The money cheat code: Rule of 72 | "I didn't know this" moment, show your parents |
-| 004 | Your birthday money could be $24,000 | Show your parents |
+| 003 | Your savings might take 72 years to double (Rule of 72) | Save it, check your own rate |
+| 004 | $25/month on a $1,000 credit card: guess when you're free (82 months) | Show a parent, ask their card's rate |
 | 005 | Millionaire for less than $10 a day | Save or share with a friend |
-| 006 | Those game skins cost you $20,000 | Send to the gamer friend |
+| 006 | $10/month on skins, guess what it could have been | Tag the gamer friend |
 
 ## Format rules
 - 30 to 45 seconds for Shorts. Later, a 60 to 75 second TikTok cut with an extra example so it qualifies for Creator Rewards.
@@ -38,3 +38,16 @@ Short money videos that a 13 to 25 year old wants to send to a friend or show a 
 - YouTube: uploaded ahead of time as private with `publishAt`, so YouTube publishes it itself. The time is 6 PM ET on weekdays and 12 PM ET on weekends (Blogging Wizard, Buffer and Sprout data).
 - TikTok: the Content Posting API sends the video to the account's inbox at the scheduled time, with the caption ready. The owner taps post. TikTok's API rules require the owner to see and approve each post until the app passes audit.
 - Hashtags: 3 to 5 per post, meaning 2 broad (#money #personalfinance), 1 community (#fintok), and 1 or 2 topical. TikTok and YouTube both penalize hashtag stuffing.
+
+## Review round 2 (v4, 2026-09-30)
+Three reviewer agents (virality, motion design, audio with speech-to-text) scored the v3 set 3 to 7 out of 10. What changed:
+- **Hook:** the result is on screen from frame 0. When the video has a guess, the hook shows "???" instead, so the guess is real suspense.
+- **Reveal:** a pause (⏸) with a riser, a boom, a camera punch and a monitor flash. The counter shows "???" until the boom, never a wrong number.
+- **Guess beat:** three options with a countdown. The right answer isn't always the biggest or the last.
+- **Loop:** the last line ends on "because…" and the video restarts on the hook sentence.
+- **Honesty:** the assumption behind the numbers (7% average, not guaranteed, or the example APR) stays on the monitor while the numbers are shown.
+- **Centy:** 5 expressions, a lean-in on the hook, and he points at charts.
+- **Voice:** af_heart 0.6 + am_michael 0.4 at 1.18x, the most expressive and best understood in the speech-to-text test.
+- **Mix:** music ducks about 8 dB under the voice; reveal effects are quieter than the revealed number.
+- **Birthday money** was cut because it repeated the skins video. It was replaced by credit card minimum payments (debt compounding against you).
+- **Length:** 20 to 30 seconds.

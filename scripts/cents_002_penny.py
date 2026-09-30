@@ -1,37 +1,40 @@
 """Cents in Sixty #002 - $1M now or a doubling penny?"""
 from studio.channels import CENTS_IN_SIXTY
-from studio.finance import money, spoken_millions, spoken_dollars
+from studio.finance import money
 
 days = [0.01 * 2 ** d for d in range(30)]
-final, day20 = days[-1], days[19]
+final, day10, day20 = days[-1], days[9], days[19]
 
 TITLE = "$1,000,000 now or a penny that doubles for 30 days?"
-CAPTION = (f"A penny doubled every day for 30 days = {money(final)}. On day 20 it's only {money(day20)}. "
-           "That's compounding. Which one did you pick? #money #personalfinance #fintok #compoundinterest")
+CAPTION = (f"1¢ on day 1, doubling daily: ${day10:,.2f} on day 10, ${day20:,.2f} on day 20, ${final:,.2f} on day 30. "
+           "That's compounding. A or B? (A math illustration; real investments don't double daily. Not financial advice.) "
+           "#compoundinterest #math #personalfinance #moneytips")
 
 SPEC = {
     **CENTS_IN_SIXTY,
     "scenes": [
-        {"say": "Would you take one million dollars right now, or a penny that doubles every day for thirty days?",
-         "visual": {"kind": "stack", "lines": [
-             {"text": "A) $1,000,000", "size": 96, "at": 0.3},
-             {"text": "or", "size": 70, "at": 1.6},
-             {"text": "B) 1¢ x 2 daily", "size": 96, "accent": True, "at": 2.6}]},
-         "sfx": [("pop", 0.3), ("pop", 2.6)]},
-        {"say": "Most people grab the million. Let's see if that's smart.",
-         "visual": {"kind": "hero", "icon": "penny"}, "sfx": [("whoosh", 0.0)]},
-        {"say": f"On day ten, your penny is worth five dollars and twelve cents. Day twenty? Only {spoken_dollars(day20)}.",
-         "visual": {"kind": "chart", "values": days[:20], "marks": {0: "Day 1", 9: "Day 10", 19: "Day 20"}},
-         "sfx": [("whoosh", 0.0)]},
-        {"say": "Looks like a terrible deal, right? But watch the last ten days.",
-         "visual": {"kind": "stack", "lines": [{"text": "Day 20", "size": 90}, {"text": money(day20), "size": 130, "accent": True, "at": 0.6}]},
-         "sfx": [("pop", 0.6)]},
-        {"say": f"On day thirty, that penny is worth {spoken_millions(final)} dollars.",
-         "visual": {"kind": "counter", "from": day20, "to": final, "label": "Day 30", "start_at": 0.4, "run": 1.8, "coins": True},
-         "sfx": [("whoosh", 0.0), ("ding", 2.2)]},
-        {"say": "That's compounding. Slow at first, then it explodes. Time matters more than money.",
-         "visual": {"kind": "hero", "icon": "rocket"}},
-        {"say": "Be honest. Which one did you pick? A or B? Tell me in the comments.",
+        {"say": "A million dollars now… or one penny that doubles every day for thirty days?", "speed": 1.18,
+         "lean": True, "expr": "smug", "cap": "$1,000,000 now… or 1¢ that doubles every day for 30 days?",
+         "visual": {"kind": "stack", "lines": [{"text": "A) $1,000,000", "size": 110},
+                                               {"text": "B) 1¢, doubling", "size": 110, "accent": True, "at": 0.6},
+                                               {"text": "for 30 days", "size": 90, "at": 1.4}]},
+         "sfx": [("pop", 0.0), ("pop", 0.6), ("pop", 1.4)]},
+        {"say": "Your gut says A.", "expr": "smug",
+         "visual": {"kind": "stack", "lines": [{"text": "Your gut says", "size": 100}, {"text": "A", "size": 280, "accent": True, "at": 0.4}]},
+         "sfx": [("pop", 0.4)]},
+        {"say": "On day ten: five dollars. On day twenty: fifty-two hundred.",
+         "cap": f"On day 10: ${day10:.2f}. On day 20: {money(day20)}.",
+         "visual": {"kind": "chart", "values": days[:20], "marks": {0: "Day 1", 9: "Day 10", 19: "Day 20"}}},
+        {"say": "⚡ Ten days left, and the penny's losing by almost a million.", "expr": "worried",
+         "cap": "10 days left, and the penny's losing by almost $1M.",
+         "visual": {"kind": "race", "lanes": [{"label": "A) the million", "to": 1_000_000, "from": 1_000_000},
+                                              {"label": "B) the penny, day 20", "to": day20, "from": 0}],
+                    "run": 1.2, "verdict": f"-{money(1_000_000 - day20)}"}},
+        {"say": "Lock in your guess for day thirty.", "hold": 1.4, "cap": "Lock in your guess for day 30.", "expr": "worried",
+         "visual": {"kind": "guess", "title": "DAY 30?", "options": ["$900,000", "$5.4 million", "$54 million"], "answer": 1}},
+        {"say": "Day thirty… ⏸ five point four million.", "speed": 1.0, "cap": f"Day 30… {money(final)}.",
+         "visual": {"kind": "counter", "from": day20, "to": final, "label": "day 30", "start_at": "reveal", "run": 0.7, "coins": True}},
+        {"say": "That's compounding. So, A or B? One letter in the comments.", "expr": "hype",
          "visual": {"kind": "cta", "text": "A or B?"}, "sfx": [("pop", 0.1)]},
     ],
 }

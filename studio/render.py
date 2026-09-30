@@ -1,12 +1,14 @@
-"""Render a voiced scene spec to a vertical 1080x1920 MP4.
+"""Render a voiced scene spec to a vertical 1080x1920, 60 fps MP4.
 
-Each scene has a line of voiceover (`say`) and a visual. The voice decides how
-long the scene runs; captions follow the voice word by word. Frames are drawn
-with Pillow and piped to ffmpeg, then muxed with the mixed audio track.
+Each scene has a line of voiceover (`say`, with ⏸ marking a dramatic pause before a
+reveal) and a visual for the studio monitor. The voice decides how long each scene runs.
+Captions follow the voice phrase by phrase. Frames are drawn with Pillow and piped to
+ffmpeg, then muxed with the mixed audio track.
 """
 import math
 import os
 import random
+import re
 import subprocess
 import tempfile
 
@@ -16,18 +18,21 @@ import soundfile as sf
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from studio import audio
-from studio.studio_scene import Studio, draw_presenter, mouth_curve
+from studio.studio_scene import DESK_Y, HEAD, PANEL, Studio, draw_presenter, mouth_curve
 
 W, H = 1080, 1920
 FPS = 60
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 ASSETS = os.path.join(os.path.dirname(__file__), "..", "assets")
 
-# Keep content clear of the TikTok/Shorts overlays: top bar, right-side buttons, bottom caption.
-SAFE_LEFT, SAFE_RIGHT, SAFE_TOP, SAFE_BOTTOM = 80, W - 190, 260, H - 420
+# Keep text clear of the TikTok/Shorts overlays: top bar, right-side buttons, bottom caption.
+SAFE_LEFT, SAFE_RIGHT = 70, 890
 CX = (SAFE_LEFT + SAFE_RIGHT) // 2
-VISUAL_Y = 635            # centre of the monitor panel
-CAPTION_Y = 1452          # caption line, on the desk front
+VISUAL_Y = 520            # centre of the visual area on the monitor
+CAPTION_Y = 1430          # caption line, on the desk front, clear of the bottom UI
+GOLD = (255, 204, 51)
+WHITE = (255, 255, 255)
+DARK = (10, 6, 24)
 
 _fonts = {}
 
@@ -61,142 +66,64 @@ def mix(a, b, t):
     return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
 
 
-# ---------- background ----------
+# ---------- text ----------
 
-class Background:
-    """Gradient with soft light blobs that drift slowly, so the frame never sits still."""
-
-    def __init__(self, theme):
-        top, bottom = rgb(theme["bg_top"]), rgb(theme["bg_bottom"])
-        grad = np.linspace(0, 1, H)[:, None, None]
-        arr = np.array(top)[None, None, :] * (1 - grad) + np.array(bottom)[None, None, :] * grad
-        self.base = Image.fromarray(np.repeat(arr, W, axis=1).astype(np.uint8))
-        blob = Image.new("L", (700, 700), 0)
-        ImageDraw.Draw(blob).ellipse([230, 230, 470, 470], fill=80)
-        self.blob = blob.filter(ImageFilter.GaussianBlur(60))
-        self.glow = Image.new("RGB", (700, 700), rgb(theme["accent"]))
-
-    def frame(self, t):
-        img = self.base.copy()
-        for i, (ax, ay, sp) in enumerate([(0.2, 0.25, 0.13), (0.8, 0.6, 0.09), (0.4, 0.85, 0.11)]):
-            x = int(W * ax + 160 * math.sin(t * sp * 2 * math.pi + i)) - 350
-            y = int(H * ay + 120 * math.cos(t * sp * 2 * math.pi + i * 2)) - 350
-            img.paste(self.glow, (x, y), self.blob)
-        return img
-
-
-# ---------- drawing helpers ----------
-
-def text_center(d, xy, text, size, fill, stroke=0, stroke_fill=(0, 0, 0)):
-    room = SAFE_RIGHT - SAFE_LEFT - 50
+def fit(d, text, size, room=None):
+    room = room or (SAFE_RIGHT - SAFE_LEFT - 40)
     width = d.textlength(text, font=font(size))
-    if width > room:
-        size = size * room / width
+    return size * room / width if width > room else size
+
+
+def text_center(d, xy, text, size, fill, stroke=0, stroke_fill=DARK):
+    size = fit(d, text, size)
     d.text(xy, text, font=font(size), fill=fill, anchor="mm", stroke_width=stroke, stroke_fill=stroke_fill)
 
 
-def pop_text(d, xy, text, size, fill, t, delay=0.0, stroke=6):
-    """Text that springs in with a slight overshoot."""
+def glow_text(img, xy, text, size, fill, t=1.0):
+    """Big number with a soft glow behind it."""
+    d = ImageDraw.Draw(img)
+    size = fit(d, text, size)
+    f = font(size)
+    w = int(d.textlength(text, font=f)) + 80
+    h = int(size * 1.4) + 60
+    layer = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(layer).text((w / 2, h / 2), text, font=f, fill=255, anchor="mm")
+    glow = layer.filter(ImageFilter.GaussianBlur(16)).point(lambda v: int(v * 0.55 * t))
+    img.paste(Image.new("RGB", (w, h), fill), (int(xy[0] - w / 2), int(xy[1] - h / 2)), glow)
+    d.text(xy, text, font=f, fill=fill, anchor="mm", stroke_width=10, stroke_fill=DARK)
+
+
+def pop(img, xy, text, size, fill, t, delay=0.0, glow=False):
     p = t - delay
     if p <= 0:
         return
-    s = back_out(p / 0.35)
-    text_center(d, xy, text, size * s, fill, stroke=stroke, stroke_fill=(0, 40, 20))
+    s = back_out(p / 0.3)
+    if glow:
+        glow_text(img, xy, text, size * s, fill, s)
+    else:
+        text_center(ImageDraw.Draw(img), xy, text, size * s, fill, stroke=8)
 
 
-def draw_cup(img, cx, cy, scale, t):
+def chip(d, xy, text, color):
+    f = font(54)
+    w = d.textlength(text, font=f) + 64
+    d.rounded_rectangle([xy[0] - w / 2, xy[1] - 42, xy[0] + w / 2, xy[1] + 42], radius=42, fill=color)
+    d.text(xy, text, font=f, fill=DARK, anchor="mm")
+
+
+# ---------- icons ----------
+
+def draw_cup(img, cx, cy, s, t):
     d = ImageDraw.Draw(img)
-    s = scale
-    body = [cx - 120 * s, cy - 90 * s, cx + 120 * s, cy + 150 * s]
-    d.rounded_rectangle(body, radius=40 * s, fill=(250, 246, 238))
+    d.rounded_rectangle([cx - 120 * s, cy - 90 * s, cx + 120 * s, cy + 150 * s], radius=40 * s, fill=(250, 246, 238))
     d.ellipse([cx + 90 * s, cy - 30 * s, cx + 190 * s, cy + 90 * s], outline=(250, 246, 238), width=int(26 * s))
     d.ellipse([cx - 110 * s, cy - 110 * s, cx + 110 * s, cy - 60 * s], fill=(111, 66, 36))
     d.rounded_rectangle([cx - 120 * s, cy + 10 * s, cx + 120 * s, cy + 60 * s], radius=6, fill=(15, 157, 88))
     for k in range(3):
         x0 = cx - 60 * s + k * 60 * s
-        pts = []
-        for j in range(12):
-            yy = cy - 130 * s - j * 14 * s
-            xx = x0 + 14 * s * math.sin(j * 0.8 + t * 5 + k)
-            pts.append((xx, yy))
-        d.line(pts, fill=(255, 255, 255), width=int(10 * s), joint="curve")
+        pts = [(x0 + 14 * s * math.sin(j * 0.8 + t * 5 + k), cy - 130 * s - j * 14 * s) for j in range(12)]
+        d.line(pts, fill=WHITE, width=int(10 * s), joint="curve")
 
-
-class Coins:
-    """A burst of coins that fall when a big number lands."""
-
-    def __init__(self, n=40, seed=3):
-        r = random.Random(seed)
-        self.parts = [(r.uniform(SAFE_LEFT, SAFE_RIGHT), r.uniform(-900, -60), r.uniform(26, 46), r.uniform(0, 6))
-                      for _ in range(n)]
-
-    def draw(self, d, t, cx, cy, color):
-        if t < 0 or t > 2.2:
-            return
-        for x0, y0, r, ph in self.parts:
-            x = x0 + 30 * math.sin(ph + t * 3)
-            y = y0 + 700 * t + 500 * t * t
-            squash = abs(math.cos(ph + t * 8))
-            d.ellipse([x - r, y - r * squash, x + r, y + r * squash], fill=color, outline=(190, 130, 0), width=4)
-
-
-# ---------- captions ----------
-
-def caption_chunks(words, max_chars=16):
-    chunks, cur, length = [], [], 0
-    for i, w in enumerate(words):
-        if cur and length + 1 + len(w) > max_chars:
-            chunks.append(cur)
-            cur, length = [], 0
-        cur.append(i)
-        length += len(w) + (1 if length else 0)
-        if w[-1] in ".,?!":
-            chunks.append(cur)
-            cur, length = [], 0
-    if cur:
-        chunks.append(cur)
-    return chunks
-
-
-def word_times(words, dur):
-    """Spread words across the voice clip by length (a close fit for steady narration)."""
-    weights = [len(w) + 2 + (6 if w[-1] in ".,?!" else 0) for w in words]
-    total = sum(weights)
-    starts, acc = [], 0
-    for w in weights:
-        starts.append(dur * acc / total)
-        acc += w
-    return starts
-
-
-def draw_captions(d, theme, words, starts, t):
-    if not words or t < 0:
-        return
-    current = max(i for i, s in enumerate(starts) if s <= t) if t >= starts[0] else 0
-    chunk = next(c for c in caption_chunks(words) if current in c)
-    size = 76
-    f = font(size)
-    texts = [words[i].upper() for i in chunk]
-    widths = [d.textlength(x, font=f) for x in texts]
-    space = d.textlength(" ", font=f)
-    total = sum(widths) + space * (len(texts) - 1)
-    if total > SAFE_RIGHT - SAFE_LEFT:
-        size = int(size * (SAFE_RIGHT - SAFE_LEFT) / total)
-        f = font(size)
-        widths = [d.textlength(x, font=f) for x in texts]
-        space = d.textlength(" ", font=f)
-        total = sum(widths) + space * (len(texts) - 1)
-    x = CX - total / 2
-    for i, txt, w in zip(chunk, texts, widths):
-        active = i == current
-        color = rgb(theme["accent"]) if active else (255, 255, 255)
-        lift = 8 * (1 - clamp((t - starts[i]) / 0.18)) if active else 0
-        d.text((x + w / 2, CAPTION_Y - lift), txt, font=font(size), fill=color, anchor="mm",
-               stroke_width=8, stroke_fill=(0, 0, 0))
-        x += w + space
-
-
-# ---------- visuals ----------
 
 def draw_gamepad(img, cx, cy, s, t):
     d = ImageDraw.Draw(img)
@@ -220,9 +147,9 @@ def draw_gift(img, cx, cy, s, t):
 
 def draw_penny(img, cx, cy, s, t):
     d = ImageDraw.Draw(img)
-    squash = abs(math.cos(t * 3))
+    squash = max(abs(math.cos(t * 3)), 0.08)
     r = 150 * s
-    d.ellipse([cx - r * max(squash, 0.08), cy - r, cx + r * max(squash, 0.08), cy + r], fill=(205, 120, 60), outline=(150, 80, 30), width=10)
+    d.ellipse([cx - r * squash, cy - r, cx + r * squash, cy + r], fill=(205, 120, 60), outline=(150, 80, 30), width=10)
     if squash > 0.5:
         text_center(d, (cx, cy), "1¢", 110 * s * squash, (255, 230, 200))
 
@@ -241,113 +168,373 @@ def draw_rocket(img, cx, cy, s, t):
 ICONS = {"cup": draw_cup, "gamepad": draw_gamepad, "gift": draw_gift, "penny": draw_penny, "rocket": draw_rocket}
 
 
-def visual_hero(img, d, theme, v, t, dur):
-    ICONS[v.get("icon", "cup")](img, CX, VISUAL_Y - 10, 0.85 + 0.03 * math.sin(t * 3), t)
+class Coins:
+    """Coins that burst out of the monitor's bottom bezel and bounce onto the desk."""
+
+    def __init__(self, n=34, seed=3):
+        r = random.Random(seed)
+        self.parts = [(r.uniform(PANEL[0] + 60, PANEL[2] - 60), r.uniform(-500, 500), r.uniform(-900, -300),
+                       r.uniform(22, 38), r.uniform(0, 6)) for _ in range(n)]
+
+    def draw(self, d, t):
+        if t < 0 or t > 2.4:
+            return
+        floor = DESK_Y - 30
+        for x0, vx, vy, r, ph in self.parts:
+            x = x0 + vx * t * 0.6
+            y = PANEL[3] - 30 + vy * t + 1800 * t * t
+            if y > floor:
+                y = floor - abs(math.sin(t * 9 + ph)) * 20 * max(0, 1 - t)
+            squash = max(abs(math.cos(ph + t * 8)), 0.15)
+            r = r * (1 - clamp((t - 2.0) / 0.4))
+            d.ellipse([x - r * squash, y - r, x + r * squash, y + r], fill=GOLD, outline=(190, 130, 0), width=4)
+
+
+# ---------- visuals (drawn on the monitor) ----------
+
+def cash(x, v=None):
+    """$5,243 style, or with cents for small amounts like a penny ($0.01)."""
+    if v and v.get("unit"):
+        return f"{x:,.0f} {v['unit']}"
+    return f"${x:,.2f}" if abs(x) < 100 and x != int(x) else f"${x:,.0f}"
+
+
+def reveal_time(scene, v, key="start_at", default=0.3):
+    val = v.get(key, default)
+    if val == "reveal":
+        return scene["_reveals"][0] if scene["_reveals"] else default
+    return val
+
+
+def visual_hero(img, d, theme, v, t, scene):
+    icon_y = VISUAL_Y - (60 if "big" in v else 0)
+    ICONS[v.get("icon", "cup")](img, CX, icon_y, 0.8 + 0.03 * math.sin(t * 3), t)
     if "big" in v:
-        pop_text(d, (CX, VISUAL_Y + 225), v["big"], 130, rgb(theme["accent"]), t, delay=v.get("big_at", 0.8))
+        pop(img, (CX, VISUAL_Y + 250), v["big"], 170, GOLD, t, delay=v.get("big_at", 0.0), glow=True)
 
 
-def visual_counter(img, d, theme, v, t, dur):
-    run = v.get("run", 1.6)
-    start = v.get("start_at", 0.3)
+def visual_pair(img, d, theme, v, t, scene):
+    """Hook card: the small cause and the big result, fully on screen from frame 0.
+
+    It is also the last card, so the end matches the first frame and the video loops.
+    """
+    shown = t + 1.0
+    pop(img, (CX, VISUAL_Y - 170), v["small"], 150, WHITE, shown)
+    d.polygon([(CX - 40, VISUAL_Y - 70), (CX + 40, VISUAL_Y - 70), (CX, VISUAL_Y - 10)], fill=rgb(theme["light_a"]))
+    s = 1 + 0.04 * math.sin(t * 6)
+    glow_text(img, (CX, VISUAL_Y + 110), v["big"], 210 * s, GOLD)
+    if v.get("label"):
+        chip(d, (CX, VISUAL_Y + 290), v["label"], rgb(theme["light_a"]))
+
+
+def visual_counter(img, d, theme, v, t, scene):
+    start = reveal_time(scene, v)
+    run = v.get("run", 0.9)
     p = ease_out((t - start) / run)
     value = v["from"] + (v["to"] - v["from"]) * p
-    label = v.get("label")
-    if label:
-        pop_text(d, (CX, VISUAL_Y - 170), label, 64, (255, 255, 255), t, stroke=5)
+    if v.get("label"):
+        chip(d, (CX, VISUAL_Y - 190), v["label"], rgb(theme["light_a"]))
     landed = t - start - run
+    if v.get("start_at") == "reveal" and t < start:
+        # Nothing true to show yet: hold a pulsing ??? until the boom.
+        glow_text(img, (CX, VISUAL_Y + 20), "???", 200 * (1 + 0.06 * math.sin(t * 10)), GOLD, 0.7)
+        return
+    scale = 1.0 + (0.22 * math.exp(-landed * 7) if landed > 0 else 0)
+    glow_text(img, (CX, VISUAL_Y + 20), cash(value, v), 200 * scale, GOLD, 0.4 + 0.6 * p)
+    if v.get("sub"):
+        pop(img, (CX, VISUAL_Y + 210), v["sub"], 64, WHITE, t, delay=start + run)
     if v.get("coins"):
-        v.setdefault("_coins", Coins()).draw(d, landed, CX, VISUAL_Y, rgb(theme["accent"]))
-    scale = 1.0 + (0.18 * math.exp(-landed * 6) if landed > 0 else 0)
-    text_center(d, (CX, VISUAL_Y + 10), f"${value:,.0f}", 150 * scale, rgb(theme["accent"]),
-                stroke=8, stroke_fill=(0, 40, 20))
+        scene.setdefault("_coins", Coins()).draw(d, landed)
 
 
-def visual_stack(img, d, theme, v, t, dur):
+def visual_stack(img, d, theme, v, t, scene):
     lines = v["lines"]
-    gap = 150
+    gap = v.get("gap", 175)
     y0 = VISUAL_Y - gap * (len(lines) - 1) / 2
     for i, ln in enumerate(lines):
-        at = ln.get("at", i * dur / (len(lines) + 0.5))
-        color = rgb(theme["accent"]) if ln.get("accent") else (255, 255, 255)
-        pop_text(d, (CX, y0 + i * gap), ln["text"], ln.get("size", 100), color, t, delay=at)
+        color = GOLD if ln.get("accent") else WHITE
+        size = ln.get("size", 120)
+        if ln.get("accent") and t > ln.get("at", 0.0) + 0.4:
+            size *= 1 + 0.03 * math.sin(t * 5)
+        pop(img, (CX, y0 + i * gap), ln["text"], size, color, t, delay=ln.get("at", 0.0), glow=ln.get("accent", False))
 
 
-def visual_chart(img, d, theme, v, t, dur):
+def visual_chart(img, d, theme, v, t, scene):
     values, marks = v["values"], v.get("marks", {})
     top_v = max(values)
-    left, right = SAFE_LEFT + 20, SAFE_RIGHT - 20
-    base, height = VISUAL_Y + 245, 420
+    left, right = SAFE_LEFT + 30, SAFE_RIGHT - 30
+    base, height = VISUAL_Y + 300, 460
     n = len(values)
     bw = (right - left) / n
-    grow = ease_out(t / (dur * 0.85))
-    shown = max(1, int(n * grow))
-    accent = rgb(theme["accent"])
+    grow = ease_out(t / max(0.6, scene["_dur"] * 0.55))
+    shown = max(1, math.ceil(n * grow))
+    a = rgb(theme["light_a"])
     for i in range(shown):
         h = height * values[i] / top_v
         x = left + i * bw
-        shade = mix((255, 240, 180), accent, i / n)
-        d.rounded_rectangle([x + 3, base - h, x + bw - 3, base], radius=6, fill=shade)
-    d.line([(left, base + 4), (right, base + 4)], fill=(255, 255, 255), width=4)
+        d.rounded_rectangle([x + 3, base - h, x + bw - 3, base], radius=6, fill=mix(a, GOLD, i / n))
+    d.line([(left, base + 4), (right, base + 4)], fill=WHITE, width=4)
     for i, label in marks.items():
         if i < shown:
-            x = left + i * bw + bw / 2
-            text_center(d, (x, base + 44), label, 34, (255, 255, 255), stroke=3)
-    text_center(d, (CX, VISUAL_Y - 245), f"${values[shown - 1]:,.0f}", 100, accent, stroke=8, stroke_fill=(0, 40, 20))
+            text_center(d, (left + i * bw + bw / 2, base + 50), label, 54, WHITE, stroke=4)
+    glow_text(img, (CX, VISUAL_Y - 225), cash(values[shown - 1], v), 124, GOLD)
 
 
-def visual_cta(img, d, theme, v, t, dur):
-    logo = v.get("_logo")
+def visual_race(img, d, theme, v, t, scene):
+    """Two lanes racing: e.g. 1% vs 7%, or start at 15 vs start at 35."""
+    lanes = v["lanes"]
+    top_v = max(l["to"] for l in lanes)
+    start = reveal_time(scene, v, default=0.2)
+    run = v.get("run", scene["_dur"] * 0.7)
+    p = ease_out((t - start) / run)
+    colors = [rgb(theme["light_b"]), GOLD]
+    full = SAFE_RIGHT - SAFE_LEFT - 40
+    for i, lane in enumerate(lanes):
+        y = VISUAL_Y - 200 + i * 340
+        text_center(d, (CX, y - 80), lane["label"], 64, WHITE, stroke=4)
+        value = lane.get("from", 0) + (lane["to"] - lane.get("from", 0)) * p
+        w = max(24, full * value / top_v)
+        x0 = SAFE_LEFT + 20
+        d.rounded_rectangle([x0, y - 40, x0 + w, y + 60], radius=30, fill=colors[i])
+        label = cash(value, v)
+        if x0 + w + 30 + d.textlength(label, font=font(72)) < SAFE_RIGHT:
+            d.text((x0 + w + 20, y + 10), label, font=font(72), fill=WHITE, anchor="lm", stroke_width=4, stroke_fill=DARK)
+        else:
+            d.text((x0 + w - 20, y + 10), label, font=font(72), fill=DARK, anchor="rm")
+    if v.get("verdict") and p >= 0.999:
+        pop(img, (CX, VISUAL_Y + 310), v["verdict"], 120, GOLD, t, delay=start + run, glow=True)
+
+
+def visual_guess(img, d, theme, v, t, scene):
+    """Guess-before-reveal: three options, a lock-in countdown, then the right one lights up."""
+    reveal = reveal_time(scene, v, "reveal_at", scene["_dur"] - 0.6)
+    text_center(d, (CX, VISUAL_Y - 290), v.get("title", "GUESS!"), 84, WHITE, stroke=5)
+    on = t >= reveal
+    for i, opt in enumerate(v["options"]):
+        y = VISUAL_Y - 130 + i * 165
+        right = i == v["answer"]
+        p = back_out((t - i * 0.15) / 0.3)
+        if p <= 0:
+            continue
+        fill = GOLD if (on and right) else (50, 40, 80) if on else (64, 52, 110)
+        w = 330 * p * (1.08 if (on and right) else 1.0)
+        d.rounded_rectangle([CX - w, y - 62, CX + w, y + 62], radius=40, fill=fill,
+                            outline=WHITE if not on else (128, 120, 150) if not right else fill, width=4)
+        text_center(d, (CX, y), opt, 74 * p, DARK if (on and right) else WHITE if not on else (170, 165, 190))
+        if on and not right:
+            d.line([(CX - w + 40, y), (CX + w - 40, y)], fill=(255, 90, 110), width=8)
+    if not on:
+        left = math.ceil(reveal - t)
+        if left <= 3:
+            beat = back_out(1 - ((reveal - t) % 1.0))
+            text_center(d, (CX, VISUAL_Y + 320), str(left), 120 * (0.7 + 0.3 * beat), rgb(theme["light_a"]), stroke=6)
+
+
+def visual_cta(img, d, theme, v, t, scene):
+    logo = scene.get("_logo")
     if logo is None:
         src = Image.open(os.path.join(ASSETS, "branding", "cents-in-sixty.png")).convert("RGB")
         mask = Image.new("L", src.size, 0)
         ImageDraw.Draw(mask).ellipse([0, 0, src.size[0], src.size[1]], fill=255)
-        v["_logo"] = logo = (src, mask)
-    s = back_out(t / 0.45)
+        scene["_logo"] = logo = (src, mask)
+    s = back_out(t / 0.4)
     if s > 0.05:
-        size = int(360 * s)
-        img.paste(logo[0].resize((size, size)), (CX - size // 2, VISUAL_Y - 120 - size // 2),
-                  logo[1].resize((size, size)))
-    pop_text(d, (CX, VISUAL_Y + 190), v.get("text", "FOLLOW"), 84, rgb(theme["accent"]), t, delay=0.5)
+        size = int(380 * s)
+        img.paste(logo[0].resize((size, size)), (CX - size // 2, VISUAL_Y - 130 - size // 2), logo[1].resize((size, size)))
+    pop(img, (CX, VISUAL_Y + 170), v.get("text", "FOLLOW"), 130 * (1 + 0.04 * math.sin(t * 6)), GOLD, t, delay=0.2, glow=True)
 
 
-VISUALS = {"hero": visual_hero, "counter": visual_counter, "stack": visual_stack,
-           "chart": visual_chart, "cta": visual_cta}
+VISUALS = {"hero": visual_hero, "pair": visual_pair, "counter": visual_counter, "stack": visual_stack,
+           "chart": visual_chart, "race": visual_race, "guess": visual_guess, "cta": visual_cta}
+
+
+# ---------- captions ----------
+
+NUMBERISH = re.compile(r"[$\d%]")
+
+
+def caption_timeline(scene):
+    """[(word, start)] in scene time, synced per phrase to the real voice timings."""
+    spoken = scene["_phrases"]
+    shown = [p for p in audio.split_phrases(scene.get("cap", scene["_say"])) if p != audio.PAUSE]
+    if not spoken:
+        return []
+    if len(shown) != len(spoken):
+        shown = [" ".join(shown)]
+        spoken = [(shown[0], spoken[0][1], spoken[-1][2])]
+    out = []
+    for text, (_, a, b) in zip(shown, spoken):
+        words = text.split()
+        weights = [len(w) + 2 for w in words]
+        acc = 0
+        for w, wt in zip(words, weights):
+            out.append((w, scene["_lead"] + a + (b - a) * acc / sum(weights)))
+            acc += wt
+    return out
+
+
+def caption_chunks(words, max_chars=12):
+    chunks, cur, length = [], [], 0
+    for i, (w, _) in enumerate(words):
+        wl = len(w) * (1.2 if NUMBERISH.search(w) else 1)
+        if cur and (length + 1 + wl > max_chars):
+            chunks.append(cur)
+            cur, length = [], 0
+        cur.append(i)
+        length += wl + (1 if length else 0)
+        if w[-1] in ".,?!…":
+            chunks.append(cur)
+            cur, length = [], 0
+    if cur:
+        chunks.append(cur)
+    merged = []
+    for c in chunks:     # never leave a lone short word hanging
+        prev = merged[-1] if merged else None
+        prev_text = " ".join(words[i][0] for i in prev) if prev else ""
+        if (prev and len(c) == 1 and len(words[c[0]][0]) <= 6 and len(prev) < 3
+                and prev_text[-1] not in ".,?!…" and len(prev_text) + 1 + len(words[c[0]][0]) <= 13):
+            merged[-1] = merged[-1] + c
+        else:
+            merged.append(c)
+    return merged
+
+
+def draw_captions(img, timeline, chunks, t):
+    if not timeline or t < timeline[0][1] - 0.05:
+        return
+    current = max(i for i, (_, s) in enumerate(timeline) if s <= t + 0.05)
+    chunk = next(c for c in chunks if current in c)
+    d = ImageDraw.Draw(img)
+    appear = timeline[chunk[0]][1]
+    size = 104 * (0.85 + 0.15 * ease_out((t - appear) / 0.08))
+    texts = [timeline[i][0].upper() for i in chunk]
+    sizes = [size * (1.2 if NUMBERISH.search(x) else 1.0) for x in texts]
+    widths = [d.textlength(x, font=font(s)) for x, s in zip(texts, sizes)]
+    space = d.textlength(" ", font=font(size))
+    total = sum(widths) + space * (len(texts) - 1)
+    room = SAFE_RIGHT - SAFE_LEFT
+    if total > room:
+        k = room / total
+        sizes = [s * k for s in sizes]
+        widths = [w * k for w in widths]
+        space *= k
+        total = room
+    x = CX - total / 2
+    for i, txt, s, w in zip(chunk, texts, sizes, widths):
+        color = GOLD if (i == current or NUMBERISH.search(txt)) else WHITE
+        d.text((x + w / 2 + 5, CAPTION_Y + 7), txt, font=font(s), fill=(0, 0, 0), anchor="mm", stroke_width=12, stroke_fill=(0, 0, 0))
+        d.text((x + w / 2, CAPTION_Y), txt, font=font(s), fill=color, anchor="mm", stroke_width=12, stroke_fill=(0, 0, 0))
+        x += w + space
+
+
+# ---------- camera ----------
+
+def camera(img, scene_t, scene_dur, now, hits):
+    """Slow push-in across each scene, plus a punch and shake on every hit."""
+    s = 1.0 + 0.045 * clamp(scene_t / max(scene_dur, 0.1))
+    dx = dy = 0.0
+    for h in hits:
+        dt = now - h
+        if 0 <= dt < 0.25:
+            k = math.exp(-dt * 18)
+            s += 0.04 * k
+            dx += 7 * k * math.sin(dt * 90)
+            dy += 5 * k * math.cos(dt * 110)
+    if s <= 1.0005 and abs(dx) < 0.5 and abs(dy) < 0.5:
+        return img
+    cw, ch = W / s, H / s
+    x0 = (W - cw) / 2 + dx
+    y0 = (H - ch) * 0.45 + dy
+    return img.resize((W, H), Image.BILINEAR, box=(x0, y0, x0 + cw, y0 + ch))
+
+
+def flash(img, now, reveals):
+    for r in reveals:
+        if 0 <= now - r < 0.07:
+            x0, y0, x1, y1 = PANEL
+            region = img.crop((x0, y0, x1, y1))
+            img.paste(Image.blend(region, Image.new("RGB", region.size, WHITE), 0.35), (x0, y0))
+
+
+def speed_lines(img, k):
+    d = ImageDraw.Draw(img, "RGBA")
+    cx, cy = HEAD[0], HEAD[1]
+    for i in range(24):
+        a = i / 24 * 2 * math.pi
+        r0, r1, w = 260, 1400, 0.035
+        d.polygon([(cx + r0 * math.cos(a), cy + r0 * math.sin(a)),
+                   (cx + r1 * math.cos(a - w), cy + r1 * math.sin(a - w)),
+                   (cx + r1 * math.cos(a + w), cy + r1 * math.sin(a + w))], fill=(255, 255, 255, int(70 * k)))
 
 
 # ---------- main ----------
 
+LEAD, GAP = 0.05, 0.08
+
+
 def build_audio(spec):
     """Voice every scene, then lay voice, music and sound effects on one track."""
-    lead, tail = 0.15, spec.get("scene_gap", 0.25)
-    clips, t = [], 0.0
+    t = 0.0
+    voice_default, speed_default = spec.get("voice", "af_heart"), spec.get("speed", 1.1)
+    clips = []
     for scene in spec["scenes"]:
-        clip = audio.speak(scene["say"], voice=spec.get("voice", "af_heart"), speed=spec.get("speed", 1.08))
-        dur = lead + len(clip) / audio.SR + tail
-        clips.append((t + lead, clip))
-        scene["_start"], scene["_dur"], scene["_voice_dur"] = t, dur, len(clip) / audio.SR
-        t += dur
-    total = t + 0.6
-    track = np.zeros(int(total * audio.SR) + audio.SR, dtype=np.float32)
-    voice = np.zeros_like(track)
-    music = audio.music_bed(total)
-    track[: len(music)] += music * spec.get("music_gain", 0.55)
+        scene["_blip"] = "⚡" in scene["say"]
+        scene["_say"] = scene["say"].replace("⚡", "").strip()
+        clip, phrases, reveals = audio.speak_line(scene["_say"], scene.get("voice", voice_default),
+                                                  scene.get("speed", speed_default))
+        scene["_lead"] = LEAD
+        scene["_phrases"] = phrases
+        scene["_reveals"] = [LEAD + r for r in reveals]
+        scene["_start"] = t
+        scene["_dur"] = LEAD + len(clip) / audio.SR + GAP + scene.get("hold", 0.0)
+        clips.append((t + LEAD, clip))
+        t += scene["_dur"]
+    total = t + 0.1
+    n = int(total * audio.SR) + audio.SR // 2
+    voice = np.zeros(n, dtype=np.float32)
     for at, clip in clips:
-        audio.place(track, clip, at, gain=1.0)
-        audio.place(voice, clip, at, gain=1.0)
+        audio.place(voice, clip, at)
+    music = audio.duck(audio.music_bed(n / audio.SR)[:n], voice)
+    fx = np.zeros(n, dtype=np.float32)
+    hits = []
     for scene in spec["scenes"]:
+        s0 = scene["_start"]
+        if scene["_blip"]:
+            audio.place(fx, audio.sfx("blip"), s0)
         for kind, offset in scene.get("sfx", []):
-            audio.place(track, audio.sfx(kind), scene["_start"] + offset)
+            audio.place(fx, audio.sfx(kind), s0 + offset)
+            if kind in ("pop", "ding", "boom"):
+                hits.append(s0 + offset)
+        for r in scene["_reveals"]:
+            at = s0 + r
+            audio.place(fx, audio.sfx("riser"), at - 0.6)
+            audio.place(fx, audio.sfx("boom"), at - 0.03)
+            for kind in ("ding", "shimmer"):     # quieter, so they don't mask the revealed number
+                audio.place(fx, audio.sfx(kind), at, gain=0.4)
+            a, b = int((at - audio.PAUSE_SECONDS) * audio.SR), int(at * audio.SR)
+            music[a:b] *= 0.05              # drop the beat out for the pause
+            hits.append(at)
+        if scene["visual"]["kind"] == "guess":
+            reveal = scene["_reveals"][0] if scene["_reveals"] else scene["_dur"] - 0.6
+            for k in range(3):
+                audio.place(fx, audio.sfx("tick"), s0 + reveal - 1.5 + k * 0.5)
+    track = voice + music * spec.get("music_gain", 0.6) + fx * 0.8
     peak = np.max(np.abs(track)) or 1
-    return track / peak * 0.9, voice, total
+    return track / peak * 0.9, voice, total, sorted(hits)
 
 
 def render(spec, out_path):
     theme = spec["theme"]
-    track, voice, total = build_audio(spec)
-    studio = Studio()
-    mouths, shapes = mouth_curve(voice, audio.SR, FPS, int(total * FPS) + 1)
-    hits = [s["_start"] + off for s in spec["scenes"] for _, off in s.get("sfx", [])]
+    track, voice, total, hits = build_audio(spec)
+    studio = Studio(theme)
+    n_frames = int(total * FPS)
+    mouths, shapes = mouth_curve(voice, audio.SR, FPS, n_frames + 1)
+    pulse = np.convolve(mouths, np.ones(9) / 9, mode="same")
+    scenes = spec["scenes"]
+    for sc in scenes:
+        sc["_timeline"] = caption_timeline(sc)
+        sc["_chunks"] = caption_chunks(sc["_timeline"])
+    reveals_abs = [sc["_start"] + r for sc in scenes for r in sc["_reveals"]]
     with tempfile.TemporaryDirectory() as tmp:
         wav = os.path.join(tmp, "a.wav")
         silent = os.path.join(tmp, "v.mp4")
@@ -355,26 +542,51 @@ def render(spec, out_path):
         ff = imageio_ffmpeg.get_ffmpeg_exe()
         proc = subprocess.Popen([ff, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
                                  "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-", "-c:v", "libx264",
-                                 "-pix_fmt", "yuv420p", "-crf", "20", silent], stdin=subprocess.PIPE)
-        n_frames = int(total * FPS)
-        scenes = spec["scenes"]
-        for scene in scenes:
-            scene["_words"] = scene["say"].split()
-            scene["_starts"] = word_times(scene["_words"], scene["_voice_dur"])
+                                 "-pix_fmt", "yuv420p", "-crf", "20", "-preset", "fast", silent], stdin=subprocess.PIPE)
         for f in range(n_frames):
             now = f / FPS
             scene = next((s for s in scenes if s["_start"] <= now < s["_start"] + s["_dur"]), scenes[-1])
             t = now - scene["_start"]
-            img = studio.frame(now)
+            pl = float(pulse[f])
+            img = studio.frame(now, pl)
             d = ImageDraw.Draw(img)
-            VISUALS[scene["visual"]["kind"]](img, d, theme, scene["visual"], t, scene["_dur"])
+            VISUALS[scene["visual"]["kind"]](img, d, theme, scene["visual"], t, scene)
+            note = scene.get("note")
+            if note:   # the assumption behind the numbers stays on screen while they are shown
+                text_center(d, (CX, PANEL[1] + 40), note if isinstance(note, str) else spec["note"], 32,
+                            (200, 200, 225), stroke=3)
+            flash(img, now, reveals_abs)
             bounce = max([math.exp(-(now - h) * 9) for h in hits if 0 <= now - h < 0.6] or [0])
-            draw_presenter(img, now, float(mouths[f]), bounce, float(shapes[f]))
-            d = ImageDraw.Draw(img)
-            draw_captions(d, theme, scene["_words"], scene["_starts"], t - 0.15)
+            point = 0.0
+            if scene["visual"]["kind"] in ("chart", "counter", "race", "guess", "stack"):
+                point = clamp(t / 0.2) * clamp((1.0 - t) / 0.25)
+            expr = scene.get("expr", "talk")
+            if any(0 <= now - r < 1.2 for r in reveals_abs):
+                expr = scene.get("reveal_expr", "shocked")
+            if scene.get("lean") and t < 0.8:
+                # Draw Centy on an opaque copy for colour and on a clear layer for the shape,
+                # so his translucent highlights don't punch holes when he is scaled up.
+                solid = img.copy()
+                draw_presenter(solid, now, float(mouths[f]), bounce, float(shapes[f]), expr, 0)
+                layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+                draw_presenter(layer, now, float(mouths[f]), bounce, float(shapes[f]), expr, 0)
+                shape = layer.getchannel("A").point(lambda a: 255 if a > 8 else 0)
+                k = math.sin(math.pi * clamp(t / 0.8))
+                sc_ = 1 + 0.35 * k
+                speed_lines(img, k)
+                size = (int(W * sc_), int(H * sc_))
+                big, big_mask = solid.resize(size, Image.BILINEAR), shape.resize(size, Image.BILINEAR)
+                studio.desk(img, now, pl)
+                img.paste(big, (int(HEAD[0] - HEAD[0] * sc_), int(HEAD[1] - HEAD[1] * sc_)), big_mask)
+            else:
+                draw_presenter(img, now, float(mouths[f]), bounce, float(shapes[f]), expr, point)
+                studio.desk(img, now, pl)
+            img = camera(img, t, scene["_dur"], now, hits)
+            draw_captions(img, scene["_timeline"], scene["_chunks"], t)
             proc.stdin.write(img.tobytes())
         proc.stdin.close()
         proc.wait()
         subprocess.run([ff, "-y", "-loglevel", "error", "-i", silent, "-i", wav, "-c:v", "copy",
-                        "-af", "loudnorm=I=-14:TP=-1.5:LRA=11", "-ar", "48000", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", out_path], check=True)
+                        "-af", "alimiter=limit=0.7:attack=5:release=50,loudnorm=I=-14:TP=-1.5:LRA=11", "-ar", "48000", "-c:a", "aac", "-b:a", "192k",
+                        "-shortest", "-movflags", "+faststart", out_path], check=True)
     return total
