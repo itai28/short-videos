@@ -1,0 +1,20 @@
+"""Usage: python3 make_video.py scripts/cents_001_coffee.py"""
+import importlib.util
+import json
+import pathlib
+import sys
+
+from studio.render import render
+
+path = pathlib.Path(sys.argv[1])
+spec_mod = importlib.util.spec_from_file_location(path.stem, path)
+mod = importlib.util.module_from_spec(spec_mod)
+spec_mod.loader.exec_module(mod)
+
+out = pathlib.Path("videos") / path.stem.split("_")[0] / f"{path.stem}.mp4"
+out.parent.mkdir(parents=True, exist_ok=True)
+seconds = render(mod.SPEC, str(out))
+meta = {"title": mod.TITLE, "caption": mod.CAPTION, "seconds": seconds, "file": out.name,
+        "ai_label": False, "assets": [{"what": "all visuals and text", "source": "rendered by shorts-studio", "license": "own work"}]}
+out.with_suffix(".json").write_text(json.dumps(meta, indent=2))
+print(out, f"{seconds:.1f}s")
