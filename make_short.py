@@ -22,7 +22,7 @@ BROWSER = os.environ.get("REMOTION_BROWSER") or next(
 
 def render(slug, out, scale=1.0):
     cmd = ["npx", "remotion", "render", "Short", str(out), f"--props={json.dumps({'slug': slug})}",
-           f"--scale={scale}", "--concurrency=2", "--log=error"]
+           f"--scale={scale}", "--concurrency=2", "--log=error", "--color-space=bt709"]
     if BROWSER:
         cmd.append(f"--browser-executable={BROWSER}")
     subprocess.run(cmd, cwd=ROOT / "remotion", check=True)
