@@ -494,7 +494,8 @@ def build_audio(spec):
     voice = np.zeros(n, dtype=np.float32)
     for at, clip in clips:
         audio.place(voice, clip, at)
-    music = audio.duck(audio.music_bed(n / audio.SR)[:n], voice)
+    mcfg = spec.get("music", {})
+    music = audio.duck(audio.music_bed(n / audio.SR, style=mcfg.get("style", "chip"), bpm=mcfg.get("bpm"))[:n], voice)
     fx = np.zeros(n, dtype=np.float32)
     hits = []
     for scene in spec["scenes"]:
@@ -503,7 +504,7 @@ def build_audio(spec):
             audio.place(fx, audio.sfx("blip"), s0)
         for kind, offset in scene.get("sfx", []):
             audio.place(fx, audio.sfx(kind), s0 + offset)
-            if kind in ("pop", "ding", "boom"):
+            if kind in ("pop", "ding", "boom", "stamp", "thud"):
                 hits.append(s0 + offset)
         for r in scene["_reveals"]:
             at = s0 + r
@@ -518,7 +519,11 @@ def build_audio(spec):
             reveal = scene["_reveals"][0] if scene["_reveals"] else scene["_dur"] - 0.6
             for k in range(3):
                 audio.place(fx, audio.sfx("tick"), s0 + reveal - 1.5 + k * 0.5)
-    track = voice + music * spec.get("music_gain", 0.6) + fx * 0.8
+        elif scene["visual"].get("mode") == "guess" or scene["visual"].get("ticks"):
+            hold = scene.get("hold", 1.5)    # Remotion guess beats count 3-2-1 across the hold
+            for k in range(3):
+                audio.place(fx, audio.sfx("tick"), s0 + scene["_dur"] - hold + k * hold / 3)
+    track = voice + music * mcfg.get("gain", spec.get("music_gain", 0.6)) + fx * 0.8
     peak = np.max(np.abs(track)) or 1
     return track / peak * 0.9, voice, total, sorted(hits)
 

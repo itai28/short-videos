@@ -1,8 +1,8 @@
-import React from "react";
-import { Theme } from "../theme";
-import { Scene, Timeline } from "../types";
+import { VisualMap } from "../types";
+import { VIDEO_VISUALS } from "../videos";
 
-export type VisualProps = { scene: Scene; theme: Theme; timeline: Timeline; index: number };
+export type { VisualProps } from "../types";
 
 // kind -> component. Each scene's `visual.kind` in a script picks one.
-export const VISUALS: Record<string, React.FC<VisualProps>> = {};
+// Per-video visuals live in src/videos/<slug>/ and use "<slug-prefix>.<name>" kinds, e.g. "box.shelf".
+export const VISUALS: VisualMap = { ...VIDEO_VISUALS };

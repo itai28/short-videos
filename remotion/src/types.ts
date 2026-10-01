@@ -13,6 +13,8 @@ export type Scene = {
   expr?: string;
   lean?: boolean;
   bg?: string;
+  hold?: number;
+  speed?: number;
 };
 
 export type Timeline = {
@@ -28,3 +30,10 @@ export type Timeline = {
   mouth: number[];
   shape: number[];
 };
+
+import type React from "react";
+import type { Theme } from "./theme";
+
+/** Props every scene visual receives. Visuals render inside a Sequence, so useCurrentFrame() is scene-relative. */
+export type VisualProps = { scene: Scene; theme: Theme; timeline: Timeline; index: number };
+export type VisualMap = Record<string, React.FC<VisualProps>>;

@@ -48,7 +48,11 @@ def export(path):
     n_frames = int(total * FPS)
     mouths, shapes = mouth_curve(voice, audio.SR, FPS, n_frames + 1)
     scenes = []
-    for sc in spec["scenes"]:
+    for i, sc in enumerate(spec["scenes"]):
+        shown = [q for q in audio.split_phrases(sc.get("cap", sc["_say"])) if q != audio.PAUSE]
+        if len(shown) != len(sc["_phrases"]):
+            print(f"WARNING scene {i}: cap has {len(shown)} phrases but say has {len(sc['_phrases'])}; "
+                  "captions will drift. Match the , . ? ! … punctuation.")
         scenes.append({
             "start": sc["_start"], "dur": sc["_dur"], "lead": sc["_lead"],
             "reveals": sc["_reveals"],

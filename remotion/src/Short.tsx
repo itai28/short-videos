@@ -39,7 +39,8 @@ fontsReady.then(() => continueRender(fontHandle));
 const useCamera = (timeline: Timeline, sceneStart: number, sceneDur: number) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const now = frame / fps;
+  const now = sceneStart + frame / fps;
+  if (timeline.style?.camera === "none") return { scale: 1, dx: 0, dy: 0 };
   const push = interpolate(now, [sceneStart, sceneStart + sceneDur], [1, 1.035], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
@@ -95,7 +96,7 @@ export const Short: React.FC<ShortProps> = ({ slug, timeline }) => {
   const scene = timeline.scenes[idx] ?? timeline.scenes[timeline.scenes.length - 1];
   return (
     <AbsoluteFill style={{ backgroundColor: theme.bg1 }}>
-      <Background theme={theme} timeline={timeline} />
+      {timeline.style?.background === "none" ? null : <Background theme={theme} timeline={timeline} />}
       {timeline.scenes.map((s, i) => {
         const Visual = VISUALS[s.visual.kind];
         if (!Visual) throw new Error(`unknown visual kind ${s.visual.kind}`);
@@ -113,10 +114,10 @@ export const Short: React.FC<ShortProps> = ({ slug, timeline }) => {
           </Sequence>
         );
       })}
-      <Flash timeline={timeline} theme={theme} />
+      {timeline.style?.flash === false ? null : <Flash timeline={timeline} theme={theme} />}
       {scene.note ? <Note text={typeof scene.note === "string" ? scene.note : timeline.note ?? ""} theme={theme} /> : null}
       <Sequence from={Math.round(scene.start * fps)} layout="none" key={`cap-${idx}`}>
-        <Captions scene={{ ...scene, words: scene.words.map((w) => ({ ...w })) }} y={(scene.visual.captionY as number) ?? CAPTION_Y} accent={theme.accent} />
+        <Captions scene={{ ...scene, words: scene.words.map((w) => ({ ...w })) }} y={(scene.visual.captionY as number) ?? (timeline.style?.captionY as number) ?? CAPTION_Y} accent={theme.accent} />
       </Sequence>
       <Audio src={staticFile(`${slug}/audio.wav`)} />
     </AbsoluteFill>
@@ -133,6 +134,11 @@ const SceneFrame: React.FC<{ timeline: Timeline; index: number; children: React.
     extrapolateRight: "clamp",
     easing: Easing.bezier(0.16, 1, 0.3, 1),
   });
+  if (timeline.style?.sceneEnter === "none") {
+    return (
+      <AbsoluteFill style={{ scale: String(cam.scale), translate: `${cam.dx}px ${cam.dy}px` }}>{children}</AbsoluteFill>
+    );
+  }
   return (
     <AbsoluteFill
       style={{
