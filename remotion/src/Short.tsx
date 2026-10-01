@@ -92,7 +92,10 @@ export const Short: React.FC<ShortProps> = ({ slug, timeline }) => {
   if (!timeline) return null;
   const theme = themeOf(timeline.style);
   const now = frame / fps;
-  const idx = Math.max(0, timeline.scenes.findIndex((s) => now >= s.start && now < s.start + s.dur));
+  const last = timeline.scenes.length - 1;
+  const found = timeline.scenes.findIndex((s) => now >= s.start && now < s.start + s.dur);
+  // The video runs a hair past the last scene's end; keep showing the last scene there, not scene 0.
+  const idx = found >= 0 ? found : now >= timeline.scenes[last].start ? last : 0;
   const scene = timeline.scenes[idx] ?? timeline.scenes[timeline.scenes.length - 1];
   return (
     <AbsoluteFill style={{ backgroundColor: theme.bg1 }}>
@@ -105,7 +108,7 @@ export const Short: React.FC<ShortProps> = ({ slug, timeline }) => {
             key={i}
             name={`${i + 1}. ${s.visual.kind}`}
             from={Math.round(s.start * fps)}
-            durationInFrames={Math.max(1, Math.round(s.dur * fps))}
+            durationInFrames={i === last ? Infinity : Math.max(1, Math.round(s.dur * fps))}
             layout="none"
           >
             <SceneFrame timeline={timeline} index={i}>

@@ -16,6 +16,7 @@ TITLE = "One 18-Inch Pizza Has More Pizza Than Two 12-Inch Pizzas"
 CAPTION = (f"Pizza is sold by width, but you eat the area (π × r²). One 18-inch pizza ≈ {BIG:.1f} sq in; "
            f"two 12-inch pizzas ≈ {MED:.1f} sq in. The difference (≈{GAP:.1f} sq in) is exactly one 6-inch pizza. "
            "Double the width = 4x the pizza, so compare price per square inch. Crust and toppings vary. "
+           "Education only, not financial advice. "
            "Voice: AI (Kokoro TTS). #pizza #mathtok #moneytok #lifehack")
 
 SPEC = {

@@ -523,6 +523,14 @@ def build_audio(spec):
             hold = scene.get("hold", 1.5)    # Remotion guess beats count 3-2-1 across the hold
             for k in range(3):
                 audio.place(fx, audio.sfx("tick"), s0 + scene["_dur"] - hold + k * hold / 3)
+            # thin the music under the countdown so the ticks carry the tension
+            a, b = int((s0 + scene["_dur"] - hold) * audio.SR), min(len(music), int((s0 + scene["_dur"]) * audio.SR))
+            if b > a:
+                env = np.full(b - a, 0.2)
+                ramp = min(int(0.08 * audio.SR), (b - a) // 2)
+                env[:ramp] = np.linspace(1, 0.2, ramp)
+                env[-ramp:] = np.linspace(0.2, 1, ramp)
+                music[a:b] *= env
     track = voice + music * mcfg.get("gain", spec.get("music_gain", 0.6)) + fx * 0.8
     peak = np.max(np.abs(track)) or 1
     return track / peak * 0.9, voice, total, sorted(hits)

@@ -47,7 +47,8 @@ Each component renders inside a `<Sequence>` for its scene, so `useCurrentFrame(
 - `src/shared/Centy.tsx`: the coin mascot (`size, mouth, expr, look, headset, ink, gold, children`).
   Lip-sync: `const m = useMouth(timeline.mouth, scene.start)` then `<Centy mouth={m} />`.
 - `src/fonts.ts`: DISPLAY (Archivo Black), BODY (Inter), MONO (Space Grotesk), BALOO, BUNGEE, MARKER, CAVEAT,
-  PIXEL (Press Start 2P), PLAYFAIR, PLEX. Already loaded before render.
+  PIXEL (Press Start 2P), PLAYFAIR, PLEX. Already loaded before render, and already quoted for CSS
+  (use `fontFamily: BALOO` directly; don't wrap them in extra quotes).
 - Animate only with `useCurrentFrame()` / `interpolate` / `spring`. No CSS transitions, no `Math.random()`.
 - Guard `spring({frame: frame - Math.round(x * fps)})` with `Number.isFinite(x)`.
 

@@ -1,4 +1,4 @@
-videos/
+/videos/
 __pycache__/
 *.pyc
 .secrets/
