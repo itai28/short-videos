@@ -1,0 +1,29 @@
+{
+  "title": "One 18-Inch Pizza Has More Pizza Than Two 12-Inch Pizzas",
+  "caption": "Pizza is sold by width, but you eat the area (\u03c0 \u00d7 r\u00b2). One 18-inch pizza \u2248 254.5 sq in; two 12-inch pizzas \u2248 226.2 sq in. The difference (\u224828.3 sq in) is exactly one 6-inch pizza. Double the width = 4x the pizza, so compare price per square inch. Crust and toppings vary. Education only, not financial advice. Voice: AI (Kokoro TTS). #pizza #mathtok #moneytok #lifehack",
+  "seconds": 31.2,
+  "file": "cents_011_pizza_math.mp4",
+  "ai_label": "Voice is AI-generated (Kokoro TTS); turn on the platform's AI-generated content label.",
+  "assets": [
+    {
+      "what": "visuals, captions, mascot",
+      "source": "rendered with Remotion from our own code",
+      "license": "own work"
+    },
+    {
+      "what": "fonts",
+      "source": "Google Fonts via @fontsource",
+      "license": "SIL Open Font License"
+    },
+    {
+      "what": "voiceover",
+      "source": "Kokoro-82M TTS",
+      "license": "Apache-2.0"
+    },
+    {
+      "what": "music and sound effects",
+      "source": "synthesized by studio/audio.py",
+      "license": "own work"
+    }
+  ]
+}

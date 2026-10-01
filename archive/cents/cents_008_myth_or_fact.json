@@ -1,0 +1,29 @@
+{
+  "title": "Myth or Fact? 3 Money Rounds to Beat Your Parents",
+  "caption": "Myth or fact: score yourself, then quiz a parent. 1) Checking your OWN credit score is a soft inquiry and doesn't lower it (CFPB). 2) Debit card use isn't reported to the credit bureaus, so it doesn't build credit (CFPB). 3) Boss round: 2026 federal brackets, single filer, taxable income $50,000 to $51,000: $400 x 12% + $600 x 22% = $180, so you keep $820 of a $1,000 raise after federal income tax. Payroll and state taxes not included; benefit and credit cliffs are a separate issue (IRS IR-2025-103). Education only, not financial advice. Voice: AI (Kokoro TTS). #mythorfact #creditscore #taxbrackets #moneytok",
+  "seconds": 30.5,
+  "file": "cents_008_myth_or_fact.mp4",
+  "ai_label": "Voice is AI-generated (Kokoro TTS); turn on the platform's AI-generated content label.",
+  "assets": [
+    {
+      "what": "visuals, captions, mascot",
+      "source": "rendered with Remotion from our own code",
+      "license": "own work"
+    },
+    {
+      "what": "fonts",
+      "source": "Google Fonts via @fontsource",
+      "license": "SIL Open Font License"
+    },
+    {
+      "what": "voiceover",
+      "source": "Kokoro-82M TTS",
+      "license": "Apache-2.0"
+    },
+    {
+      "what": "music and sound effects",
+      "source": "synthesized by studio/audio.py",
+      "license": "own work"
+    }
+  ]
+}

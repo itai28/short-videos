@@ -1,0 +1,29 @@
+{
+  "title": "Collecting All 6 Mystery Figures Takes 14.7 Boxes on Average, Not 6",
+  "caption": "On average, a full set of 6 equally likely mystery figures takes 14.7 boxes (the coupon collector's problem): 1 + 1.2 + 1.5 + 2 + 3 + 6. At an example $15 a box that's about $220.50 instead of $90, plus about 8.7 duplicates. A 1-in-72 secret figure is a hypothetical: 72 boxes on average. Two friends who trade dupes need about 12.1 boxes each. Assumes equal odds and independent boxes; these are averages, not guarantees. Education only, not financial advice. Voice: AI (Kokoro TTS). #mysterybox #couponcollector #mathtok #moneytok",
+  "seconds": 31.5,
+  "file": "cents_007_blind_box_math.mp4",
+  "ai_label": "Voice is AI-generated (Kokoro TTS); turn on the platform's AI-generated content label.",
+  "assets": [
+    {
+      "what": "visuals, captions, mascot",
+      "source": "rendered with Remotion from our own code",
+      "license": "own work"
+    },
+    {
+      "what": "fonts",
+      "source": "Google Fonts via @fontsource",
+      "license": "SIL Open Font License"
+    },
+    {
+      "what": "voiceover",
+      "source": "Kokoro-82M TTS",
+      "license": "Apache-2.0"
+    },
+    {
+      "what": "music and sound effects",
+      "source": "synthesized by studio/audio.py",
+      "license": "own work"
+    }
+  ]
+}

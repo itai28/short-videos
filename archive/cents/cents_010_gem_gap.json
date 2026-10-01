@@ -1,0 +1,29 @@
+{
+  "title": "The 100-Gem Gap: Pause on the Cheapest Way to Get This Skin",
+  "caption": "Made-up game, real math. The skin costs 1,200 gems. Packs: 500 for $4.99, 1,100 for $9.99, 2,400 for $19.99, 6,500 for $49.99. Per 1,000 gems the big pack is cheapest ($7.69 vs $9.98), but for this one skin the cheapest way is 3 small packs: $14.97 with 300 gems left over (A+B is $14.98 with 400 left). Cheapest per gem isn't cheapest for you if this skin is all you want. Prices are examples, not a real store. Education only, not financial advice. Voice: AI (Kokoro TTS). #gaming #unitprice #mathtok #moneytok",
+  "seconds": 28.9,
+  "file": "cents_010_gem_gap.mp4",
+  "ai_label": "Voice is AI-generated (Kokoro TTS); turn on the platform's AI-generated content label.",
+  "assets": [
+    {
+      "what": "visuals, captions, mascot",
+      "source": "rendered with Remotion from our own code",
+      "license": "own work"
+    },
+    {
+      "what": "fonts",
+      "source": "Google Fonts via @fontsource",
+      "license": "SIL Open Font License"
+    },
+    {
+      "what": "voiceover",
+      "source": "Kokoro-82M TTS",
+      "license": "Apache-2.0"
+    },
+    {
+      "what": "music and sound effects",
+      "source": "synthesized by studio/audio.py",
+      "license": "own work"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "title": "It Cost 3.69\u00a2 to Make 1\u00a2. So Which Costs More to Make $1: Pennies or Nickels?",
+  "caption": "US Mint FY2024 average unit costs: penny 3.69\u00a2, nickel 13.78\u00a2 (they include materials, labor, overhead and distribution). To make $1: 100 pennies = $3.69, 20 nickels = $2.76. The nickel loses more per coin (8.78\u00a2 vs 2.69\u00a2); the penny loses more per dollar. Circulating penny production ended in November 2025, and pennies are still legal tender, so your penny jar still spends. Education only, not financial advice. Voice: AI (Kokoro TTS). #penny #usmint #funfacts #moneytok",
+  "seconds": 31.4,
+  "file": "cents_012_penny_museum.mp4",
+  "ai_label": "Voice is AI-generated (Kokoro TTS); turn on the platform's AI-generated content label.",
+  "assets": [
+    {
+      "what": "visuals, captions, mascot",
+      "source": "rendered with Remotion from our own code",
+      "license": "own work"
+    },
+    {
+      "what": "fonts",
+      "source": "Google Fonts via @fontsource",
+      "license": "SIL Open Font License"
+    },
+    {
+      "what": "voiceover",
+      "source": "Kokoro-82M TTS",
+      "license": "Apache-2.0"
+    },
+    {
+      "what": "music and sound effects",
+      "source": "synthesized by studio/audio.py",
+      "license": "own work"
+    }
+  ]
+}
